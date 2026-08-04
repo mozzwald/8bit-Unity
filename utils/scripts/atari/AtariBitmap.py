@@ -39,7 +39,7 @@ if "nt" == os.name:
     ex31 = "utils\scripts\exomizer-3.1.0.exe"
 else:
     # Allow a locally built binary during development while defaulting to PATH.
-    ex31 = os.environ.get("EXOMIZER", "exomizer")
+    ex31 = os.environ.get("EXOMIZER", "utils/exomizer" if os.path.exists("utils/exomizer") else "exomizer")
 
 try:
     ##############################

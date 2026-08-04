@@ -39,7 +39,7 @@ output = sys.argv[3]
 if "nt" == os.name:
     ex31 = "utils\scripts\exomizer-3.1.0.exe"
 else:
-    ex31 = os.environ.get("EXOMIZER", "exomizer")
+    ex31 = os.environ.get("EXOMIZER", "utils/exomizer" if os.path.exists("utils/exomizer") else "exomizer")
 
 def packInt(value):
     return ''.join([chr(value%256), chr(value/256)])

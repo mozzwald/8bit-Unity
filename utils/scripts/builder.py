@@ -79,8 +79,8 @@ else:
     datr = "dir2atr"
     # Exomizer has a native Linux build; Wine is both unnecessary and unusable
     # in headless/sandboxed environments.
-    ex30 = os.environ.get("EXOMIZER", "exomizer")
-    ex31 = os.environ.get("EXOMIZER", "exomizer")
+    ex30 = os.environ.get("EXOMIZER", "utils/exomizer" if os.path.exists("utils/exomizer") else "exomizer")
+    ex31 = os.environ.get("EXOMIZER", "utils/exomizer" if os.path.exists("utils/exomizer") else "exomizer")
     mads = "mads"
     famt = "wine utils/scripts/nes/text2data.exe"
     orih = "wine utils/scripts/oric/header.exe"
