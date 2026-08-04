@@ -35,6 +35,9 @@
 .export _ns_resume			= NS_Resume_Impl
 
 .import popa
+.ifdef __ATARIXL__
+.import _enable_rom, _restore_rom
+.endif
 .import popax
 
 ;==========================================================================
@@ -578,9 +581,21 @@ payload_done:
 		lda		#0
 		sta		DTIMLO+1
 
+		; SIOV lives in the OS ROM, which an atarixl program runs with banked out
+		; -- $E459 falls inside SHADOW_RAM, i.e. this program's own code. Without
+		; banking the ROM back in, the call lands in game code and no command ever
+		; reaches the bus: FujiNet sees nothing, while ns_init_netstream still
+		; reports success because it never checks the SIO status.
+		; unity/targets/atari/fujinet.c brackets its SIOV calls the same way.
+.ifdef __ATARIXL__
+		jsr		_enable_rom
+.endif
 		cli
 		jsr		SIOV
 		sei
+.ifdef __ATARIXL__
+		jsr		_restore_rom
+.endif
 
 		; program POKEY for stream mode with selected AUDF3/AUDF4
 		ldx		#8
