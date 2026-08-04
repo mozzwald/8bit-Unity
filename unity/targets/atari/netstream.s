@@ -581,20 +581,25 @@ payload_done:
 		lda		#0
 		sta		DTIMLO+1
 
-		; SIOV lives in the OS ROM, which an atarixl program runs with banked out
-		; -- $E459 falls inside SHADOW_RAM, i.e. this program's own code. Without
-		; banking the ROM back in, the call lands in game code and no command ever
-		; reaches the bus: FujiNet sees nothing, while ns_init_netstream still
-		; reports success because it never checks the SIO status.
-		; unity/targets/atari/fujinet.c brackets its SIOV calls the same way.
 .ifdef __ATARIXL__
+		; atari.inc redirects SIOV to cc65's SIO_handler on atarixl, and that
+		; handler is a whitelist: it forwards only $53/$52/$50/$57 (status, read,
+		; put, write) and answers anything else with DSTATS=$84 without ever
+		; touching the bus. FujiNet's $F0 ENABLE NETSTREAM was being dropped on
+		; the floor there, which is why no command frame ever arrived while
+		; ns_init_netstream still reported success -- it does not read DSTATS.
+		; Call the ROM vector directly instead, banking the ROM in around it the
+		; way unity/targets/atari/fujinet.c does. NetstreamPayloadBuf lives in
+		; BSS, which is outside the banked region, so SIO can reach it.
 		jsr		_enable_rom
-.endif
+		cli
+		jsr		SIOV_org
+		sei
+		jsr		_restore_rom
+.else
 		cli
 		jsr		SIOV
 		sei
-.ifdef __ATARIXL__
-		jsr		_restore_rom
 .endif
 
 		; program POKEY for stream mode with selected AUDF3/AUDF4
