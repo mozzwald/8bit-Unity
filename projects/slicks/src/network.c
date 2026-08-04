@@ -4,7 +4,8 @@
 
 char networkReady = 0;
 char chatBuffer[20];
-char udpBuffer[28];
+/* udpBuffer[28] removed: it staged 8bit-Hub datagrams. NetStream frames go
+   straight through net_proto's ring, and nothing read it. */
 
 unsigned char clIndex, clVersion;
 unsigned char clUser[MAX_NAME_LEN+1] = "";
@@ -16,10 +17,10 @@ unsigned char clPass[13] = "";
    See ref/netstream-plan/00-constraints.md section 8. */
 unsigned int packet;
 
-unsigned int svFPS, tckNET;
+/* svFPS/tckNET (the Hub's server tick negotiation) and eData1/eData2 (its event
+   payload bytes) are gone: nothing in the game ever read them. */
 unsigned char clFrame, svFrame, svMap, svStep;
 unsigned char clName[MAX_PLAYERS][MAX_NAME_LEN+1];
-unsigned char eData1, eData2;
 clock_t timeRecv, timeSend;
 
 // See slicks.c
@@ -56,17 +57,23 @@ static unsigned char netBuffer[NET_BUFFER];
    byte and the NUL-padded name. */
 #define NET_INFO_LEN (4 + MAX_PLAYERS * (1 + MAX_NAME_LEN + 1))
 
-/* Handshake replies get a generous window: the Atari link is 19200 baud and the
+/* Tick budgets are literals, not multiples of TCK_PER_SEC. On Atari that macro
+   is CLOCKS_PER_SEC, which cc65 implements as a runtime call, so every use
+   emitted a jsr ___clocks_per_sec plus a 32-bit multiply -- inside the polling
+   loops these guard. 60Hz is assumed; on PAL each window is 20% longer, which
+   is harmless for what are already deliberately generous timeouts.
+
+   Handshake replies get a generous window: the Atari link is 19200 baud and the
    server may be mid-tick. */
-#define NET_REPLY_TICKS (3 * TCK_PER_SEC)
+#define NET_REPLY_TICKS 180u		/* 3s @ 60Hz */
 
 /* Silence longer than this means the link is gone. Must outlast a map-change
    suspend, during which the Atari is talking to the disk instead. */
-#define NET_TIMEOUT_TICKS (10 * TCK_PER_SEC)
+#define NET_TIMEOUT_TICKS 600u		/* 10s @ 60Hz */
 
 /* CL_FRAME is rate limited to the server tick; sending faster only wastes
    bandwidth we do not have at 19200 baud. */
-#define NET_FRAME_TICKS (TCK_PER_SEC / 20)
+#define NET_FRAME_TICKS 3u		/* 20Hz @ 60Hz */
 
 static unsigned char joined = 0;
 static unsigned char pendingEvent = 0;
@@ -192,9 +199,6 @@ unsigned char ServerEvent()
 {
 	unsigned char event = netFrame.payload[0];
 	unsigned char i, n;
-
-	eData1 = netFrame.payload[2];
-	eData2 = netFrame.payload[3];
 
 	switch (event) {
 	case EVENT_RACE:

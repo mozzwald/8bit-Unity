@@ -126,6 +126,18 @@ def Remove(filename):
         return 'del ' + filename.replace('/','\\') + ' /F /Q\n'
     else:
         return 'rm ' + filename + '\n'
+
+def Capture(name, command):
+    # Run a command while the build script executes and keep its output in a
+    # variable, so a value produced by asset conversion can be fed to the
+    # compiler further down the same script.
+    if "nt" == os.name:
+        return 'for /f %%i in (\'' + command + '\') do set ' + name + '=%%i\n'
+    else:
+        return name + '=$(' + command + ')\n'
+
+def Var(name):
+    return '%' + name + '%' if "nt" == os.name else '$' + name
         
 def Emulate(path, executable, disk):
     disk = '..\\..\\..\\' + buildFolder + '\\' + disk
@@ -1288,7 +1300,54 @@ class Application:
                 fp.write('mkdir [maps]\n')            
                 fp.write('cd ..\n\n')
                 fp.write(Remove('build/atari/*.*'))
+
+                # Assets are converted before the program is compiled: the sprite
+                # sheet's size is only known once AtariSprites.py has written it, and
+                # LoadSprites() needs it as a compile-time constant to size its buffer
+                # statically instead of dragging in malloc/free.  Lynx and NES already
+                # order their builds this way.
+                fp.write('echo --------------- CONVERT ASSETS ---------------  \n\n')
                 
+                # Bitmaps
+                for item in bitmaps:
+                    if self.combobox_AtariCrunchAssets.get() == 'Yes':
+                        fp.write(py27 + ' utils/scripts/atari/AtariBitmap.py ' + graphics + ' crunch ' + item + ' ' + buildFolder + '/atari/' + FileBase(item, '.png') + '.img\n')
+                    else:
+                        fp.write(py27 + ' utils/scripts/atari/AtariBitmap.py ' + graphics + ' raw ' + item + ' ' + buildFolder + '/atari/' + FileBase(item, '.png') + '.img\n')
+                    
+                # Charmaps/Tilesets
+                for item in charmaps:
+                    fp.write(Copy(item, buildFolder + '/atari/' + FileBase(item, '')))
+                    
+                # Charsets
+                for item in charset:
+                    fb = FileBase(item, '.png')
+                    fp.write(py27 + ' utils/scripts/atari/AtariCharset.py ' + item + ' ' + buildFolder + '/atari/' + fb + '.chr\n')
+                    
+                # Sprites
+                if len(sprites) > 0:
+                    spriteHeight = int(self.entry_AtariSpriteHeight.get())
+                    fp.write(py27 + ' utils/scripts/atari/AtariSprites.py ' + sprites[0] + ' ' + buildFolder + '/atari/sprites.dat ' + str(spriteHeight) + '\n')
+                    # The sheet's byte count is colours x frames x height, and the
+                    # colour count comes from the PNG's palette -- so it is only
+                    # knowable after conversion.  Read it back out of the file so
+                    # LoadSprites() can declare a static buffer of exactly that
+                    # size; see unity/sprites/LoadSprites.c.
+                    fp.write(Capture('SPRITEDATA', py27 + ' utils/scripts/atari/AtariSpriteSize.py ' + buildFolder + '/atari/sprites.dat'))
+
+                # Chunks
+                for item in chunks:
+                    fp.write(py27 + ' utils/scripts/ProcessChunks.py atari ' + item + ' ' + buildFolder + '/atari/\n')
+
+                # Shared Data
+                for item in shared:
+                    fp.write(Copy(item, buildFolder + '/atari/' + FileBase(item, '')))
+
+                # Music.  Skipped for NetStream: nothing can play the track.
+                if not netstreamEnabled:
+                    for item in music:
+                        fp.write(Copy(item, buildFolder + '/atari/' + FileBase(item, '.rmt') + '.mus'))
+
                 fp.write('\necho --------------- COMPILE PROGRAM ---------------\n\n')
 
                 # Build Unity Library for eah network target
@@ -1296,7 +1355,11 @@ class Application:
                     cTarget = [ 'graphics/pixel.c', 'targets/atari/directory.c', 'targets/atari/display.c', 'targets/atari/files.c', 'targets/atari/pmg.c' ]
                     sTarget = [ 'graphics/scroll.s', 'strings/chars.s', 'targets/atari/blitCharmap.s', 'targets/atari/blitSprites.s', 'targets/atari/decrunch.s', 'targets/atari/DLIST-bmp.s', 'targets/atari/DLIST-chr.s', 'targets/atari/DLIST-plx.s', 'targets/atari/DLI.s', 'targets/atari/ROM.s', 'targets/atari/VBI.s', 'targets/atari/xbios.s' ]
                     symbols = ' -D CHUNKSIZE='  + chunkSize.replace('$','0x') + ' -D SPRITEFRAMES=' + self.entry_AtariSpriteFrames.get() + ' -D SPRITEWIDTH=' + self.entry_AtariSpriteWidth.get() + ' -D SPRITEHEIGHT=' + self.entry_AtariSpriteHeight.get()
-                    
+                    # Captured from the converted sheet above. Projects with no
+                    # sprites leave it undefined and keep the malloc() path.
+                    if len(sprites) > 0:
+                        symbols += ' -D SPRITEDATA=' + Var('SPRITEDATA')
+
                     # Network settings
                     if network == '8bit-Hub': 
                         cTarget.append('adaptors/hub.c')
@@ -1336,7 +1399,12 @@ class Application:
                         symbols += ' -Cl -O -t atari ' 
                     else:
                         BuildUnityLibrary(self, fp, ' -t atarixl', symbols, cCore+cTarget, sCore+sTarget, library)
-                        symbols += ' -Cl -O -t atarixl -C atarixl-largehimem.cfg '           
+                        # NetStream needs its own memory map: the stock config lets the
+                        # image run over bitmap frame 2 at $7010 without complaining.
+                        if network == 'NetStream':
+                            symbols += ' -Cl -O -t atarixl -C unity/targets/atari/atarixl-netstream.cfg '
+                        else:
+                            symbols += ' -Cl -O -t atarixl -C atarixl-largehimem.cfg '
                         
                     # Compile Program
                     if len(networkOptions) > 1:
@@ -1354,6 +1422,8 @@ class Application:
                     comp += 'unity/targets/atari/POKEY.s '
                     if network == 'NetStream':
                         comp += 'unity/targets/atari/netstream.s '
+                        # Header/trailer for the extra DATA chunk in atarixl-netstream.cfg
+                        comp += 'unity/targets/atari/netstream-chunk.s '
                     comp += library + ' '
                     if network == 'DragonCart':
                         if target == '48k':
@@ -1394,8 +1464,11 @@ class Application:
                     fp.write(py27 + ' utils/scripts/atari/AtariCompress.py ' + buildFolder + '/atari/loader.bin \n')
                     fp.write('\n')
 
-                # RMT player
-                if target == '64k':
+                # RMT player.  NetStream drives POKEY channels 3 and 4 as its bit
+                # clock, so RMT can never play; leaving it out frees RMTPLAYER and
+                # MUSICRAM for the linker.  See unity/targets/atari/atarixl-netstream.cfg.
+                rmtEnabled = target == '64k' and not netstreamEnabled
+                if rmtEnabled:
                     fp.write(mads + ' -o:' + buildFolder + '/atari/rmt.bin unity/targets/atari/RMT.a65 \n')
                     fp.write(py27 + ' utils/scripts/atari/AtariCompress.py ' + buildFolder + '/atari/rmt.bin \n')
                     fp.write('\n')
@@ -1409,7 +1482,7 @@ class Application:
                     cmd += buildFolder + '/atari/loader.bin '
                 else:
                     cmd += buildFolder + '/atari/' + executable + ' '
-                if target == '64k':
+                if rmtEnabled:
                     cmd += buildFolder + '/atari/rmt.bin'
                 fp.write(cmd + '\n\n')
                 
@@ -1424,41 +1497,6 @@ class Application:
                     fp.write(Remove(buildFolder + '/atari/*.xex'))
                 fp.write('\n\n')                
                                                 
-                fp.write('echo --------------- CONVERT ASSETS ---------------  \n\n')
-                
-                # Bitmaps
-                for item in bitmaps:
-                    if self.combobox_AtariCrunchAssets.get() == 'Yes':
-                        fp.write(py27 + ' utils/scripts/atari/AtariBitmap.py ' + graphics + ' crunch ' + item + ' ' + buildFolder + '/atari/' + FileBase(item, '.png') + '.img\n')
-                    else:
-                        fp.write(py27 + ' utils/scripts/atari/AtariBitmap.py ' + graphics + ' raw ' + item + ' ' + buildFolder + '/atari/' + FileBase(item, '.png') + '.img\n')
-                    
-                # Charmaps/Tilesets
-                for item in charmaps:
-                    fp.write(Copy(item, buildFolder + '/atari/' + FileBase(item, '')))
-                    
-                # Charsets
-                for item in charset:
-                    fb = FileBase(item, '.png')
-                    fp.write(py27 + ' utils/scripts/atari/AtariCharset.py ' + item + ' ' + buildFolder + '/atari/' + fb + '.chr\n')
-                    
-                # Sprites    
-                if len(sprites) > 0:
-                    spriteHeight = int(self.entry_AtariSpriteHeight.get())
-                    fp.write(py27 + ' utils/scripts/atari/AtariSprites.py ' + sprites[0] + ' ' + buildFolder + '/atari/sprites.dat ' + str(spriteHeight) + '\n')
-                    
-                # Chunks
-                for item in chunks:
-                    fp.write(py27 + ' utils/scripts/ProcessChunks.py atari ' + item + ' ' + buildFolder + '/atari/\n')
-
-                # Shared Data
-                for item in shared:
-                    fp.write(Copy(item, buildFolder + '/atari/' + FileBase(item, '')))
-
-                # Music
-                for item in music:
-                    fp.write(Copy(item, buildFolder + '/atari/' + FileBase(item, '.rmt') + '.mus'))
-
                 fp.write('\necho --------------- BUILD DISK --------------- \n\n')
                 
                 # Copy xBios files

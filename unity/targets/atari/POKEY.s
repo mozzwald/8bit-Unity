@@ -116,6 +116,7 @@ _SetupSFX:
 
 _pokeyVBI:
 .ifdef __ATARIXL__
+.ifndef NETSTREAM
 	; Process music?
 	lda _musicVBI
 	beq skipMusicVBI
@@ -135,8 +136,9 @@ playFrame:
 	jsr _restore_rom
 	
 skipMusicVBI:
+.endif	; NETSTREAM links no RMT player, so there is no music VBI to run
 .endif
-	
+
 	;-------------------
 	; Process SFX?
 	lda _sfxVBI

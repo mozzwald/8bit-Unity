@@ -53,7 +53,12 @@
 
 void LoadMusic(const char* filename)
 {
-#if defined __ORIC__
+#if defined(__ATARI__) && defined(__NETSTREAM__)
+	// NetStream builds ship no RMT player and no music track: the stream's bit
+	// clock owns POKEY channels 3 and 4, so nothing can play. MUSICRAM is handed
+	// to the linker instead -- see unity/targets/atari/atarixl-netstream.cfg.
+	(void)filename;
+#elif defined __ORIC__
 	unsigned char weird;
 	if (FileOpen(filename))
 		FileRead((char*)MUSICRAM, -1);
@@ -105,7 +110,9 @@ void LoadMusic(const char* filename)
 
 void PauseMusic(unsigned char state)
 {
-#if defined(__ATARI__) || defined(__CBM__) || defined(__ORIC__)
+#if defined(__ATARI__) && defined(__NETSTREAM__)
+	(void)state;
+#elif defined(__ATARI__) || defined(__CBM__) || defined(__ORIC__)
 	musicPaused = state;
 #elif defined(__LYNX__)
 	if (state)

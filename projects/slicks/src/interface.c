@@ -25,7 +25,7 @@ extern unsigned int packet;
 extern unsigned char svMap, svStep; 
 extern unsigned char clName[MAX_PLAYERS][MAX_NAME_LEN+1];
 extern unsigned char clIndex, clUser[MAX_NAME_LEN+1], clPass[13];
-extern char networkReady, chatBuffer[20], udpBuffer[28];
+extern char networkReady, chatBuffer[20];
 
 #if defined __NES__
  #pragma bss-name(push, "XRAM")
@@ -521,7 +521,9 @@ void PrintScores()
 	
 	// Play the background music
 	StopSFX();
-#if defined(__ATARIXL__) || defined(__LYNX__) || defined(__NES__)
+#if defined(__ATARI__) && defined(__NETSTREAM__)
+	// No RMT player and no track on disk -- see unity/sound/music.c
+#elif defined(__ATARIXL__) || defined(__LYNX__) || defined(__NES__)
 	StopMusic();
 	LoadMusic("speednik.mus");
 	PlayMusic();

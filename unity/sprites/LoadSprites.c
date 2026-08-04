@@ -46,7 +46,11 @@
 	unsigned char *sprBG[SPRITE_NUM];  		// Sprite background
 	unsigned char  sprRows[SPRITE_NUM];  	// Sprite dimensions used in algorithms
 	
-#elif defined __ATARI__	
+#elif defined __ATARI__
+  #if defined SPRITEDATA
+	// Sized from the converted sprite sheet; see builder.py and AtariSpriteSize.py
+	static unsigned char sprBuffer[SPRITEDATA];
+  #endif
 	unsigned char *sprData, sprYOffset, sprDLIs, sprCushion = 2;
 	unsigned char sprMask[] = { 1, 2, 4, 8, 1, 2, 4, 8, 1, 2, 4, 8, 1, 2, 4, 8 };	
 	unsigned char cushionLow, cushionHigh;
@@ -121,14 +125,26 @@ void LoadSprites(unsigned char* filename, const unsigned char *spriteColors)
 	// Set sprite rows size
 	memset(sprRows, SPRITEHEIGHT, SPRITE_NUM);
 	
-#elif defined __ATARI__	
+#elif defined __ATARI__
 	unsigned int size;
 
 	// Load sprite sheet
 	if (FileOpen(filename)) {
 		FileRead((char*)&size, 2);
+	#if defined SPRITEDATA
+		// builder.py converts the sprite sheet before compiling and passes its
+		// exact byte count as SPRITEDATA, so the buffer is static.  malloc() and
+		// free() cost ~740 bytes of main RAM between them, which the Atari
+		// cannot spare, and this is the only allocation the game ever makes.
+		// A short read is clamped rather than allowed to run off the end: the
+		// sheet on disk and the one measured at build time can only disagree if
+		// build/atari was rebuilt behind the compiler's back.
+		if (size > sizeof(sprBuffer)) { size = sizeof(sprBuffer); }
+		sprData = sprBuffer;
+	#else
 		if (sprData) free(sprData);
 		sprData = malloc(size);
+	#endif
 		FileRead(sprData, size);
 	}
 	

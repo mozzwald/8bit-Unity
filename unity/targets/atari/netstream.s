@@ -26,17 +26,11 @@
 ; Exports to make functions visible from C.
 .export _ns_begin_stream	= NS_BeginConcurrent_Impl
 .export _ns_end_stream		= NS_EndConcurrent_Impl
-.export _ns_get_version		= NS_GetVersion_Impl
-.export _ns_get_base		= NS_GetBase_Impl
 .export _ns_send_byte		= NS_SendByte_Impl
 .export _ns_recv_byte		= NS_RecvByte_Impl
 .export _ns_bytes_avail		= NS_BytesAvail_Impl
 .export _ns_get_status		= NS_GetStatus_Impl
-.export _ns_get_video_std	= NS_GetVideoStd_Impl
 .export _ns_init_netstream	= NS_InitNetstream_Impl
-.export _ns_get_final_flags	= NS_GetFinalFlags_Impl
-.export _ns_get_final_audf3	= NS_GetFinalAUDF3_Impl
-.export _ns_get_final_audf4	= NS_GetFinalAUDF4_Impl
 .export _ns_suspend			= NS_Suspend_Impl
 .export _ns_resume			= NS_Resume_Impl
 
@@ -63,33 +57,9 @@ NETSTREAM_HOST_MAX = 61
 		.code
 
 ;==========================================================================
-; API jump table
-NS_BeginStream:
-		jmp		NS_BeginConcurrent_Impl
-NS_EndStream:
-		jmp		NS_EndConcurrent_Impl
-NS_GetVersion:
-		jmp		NS_GetVersion_Impl
-NS_GetBase:
-		jmp		NS_GetBase_Impl
-NS_SendByte:
-		jmp		NS_SendByte_Impl
-NS_RecvByte:
-		jmp		NS_RecvByte_Impl
-NS_BytesAvail:
-		jmp		NS_BytesAvail_Impl
-NS_GetStatus:
-		jmp		NS_GetStatus_Impl
-NS_GetVideoStd:
-		jmp		NS_GetVideoStd_Impl
-NS_InitNetstream:
-		jmp		NS_InitNetstream_Impl
-NS_GetFinalFlags:
-		jmp		NS_GetFinalFlags_Impl
-NS_GetFinalAUDF3:
-		jmp		NS_GetFinalAUDF3_Impl
-NS_GetFinalAUDF4:
-		jmp		NS_GetFinalAUDF4_Impl
+; API jump table removed: the .export aliases above bind the C names straight
+; to the _Impl labels, so nothing ever dispatched through it. It came from the
+; Altirra 850 handler, whose device glue was already stripped.
 
 ;==========================================================================
 ; NS_BeginStream
@@ -346,22 +316,7 @@ not_active:
 		rts
 .endproc
 
-;==========================================================================
-; NS_GetVersion
-;
-.proc NS_GetVersion_Impl
-		lda		#$01
-		rts
-.endproc
 
-;==========================================================================
-; NS_GetBase
-;
-.proc NS_GetBase_Impl
-		lda		#<NS_BeginStream
-		ldx		#>NS_BeginStream
-		rts
-.endproc
 
 ;==========================================================================
 ; NS_SendByte
@@ -504,15 +459,6 @@ NRB_empty:
 		rts
 .endproc
 
-;==========================================================================
-; NS_GetVideoStd
-;
-; Output: A = NetstreamVideoStd (0=NTSC, 1=PAL)
-;
-.proc NS_GetVideoStd_Impl
-		lda		NetstreamVideoStd
-		rts
-.endproc
 
 ;==========================================================================
 ; NS_InitNetstream
@@ -665,20 +611,8 @@ init_fail:
 ;==========================================================================
 ; NS_GetFinalFlags/AUDF3/AUDF4
 ;
-.proc NS_GetFinalFlags_Impl
-		lda		NetstreamFinalFlags
-		rts
-.endproc
 
-.proc NS_GetFinalAUDF3_Impl
-		lda		NetstreamFinalAUDF3
-		rts
-.endproc
 
-.proc NS_GetFinalAUDF4_Impl
-		lda		NetstreamFinalAUDF4
-		rts
-.endproc
 
 ;==========================================================================
 ; LookupBaudFromNominal

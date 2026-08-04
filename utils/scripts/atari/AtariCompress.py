@@ -32,12 +32,47 @@ rawFile = xexFile[0:-4] + ".raw"
 sfxFile = rawFile+".zx0"
 
 # Sub-processes
-if "nt" == os.name:
-    zx0 = "utils\scripts\zx0.exe "
-else:
-    # Native ZX0 avoids the bundled Windows executable and Wine.
-    zx0 = os.environ.get("ZX0", "utils/zx0")
-    
+#
+# The decruncher in xboot.obx / unity/targets/atari/decrunch.s reads the ZX0 v2
+# bitstream. ZX0 v1 emits a different, silently incompatible stream: the Atari
+# decompresses garbage, runs past the end of the block and walks its destination
+# pointer through the hardware registers at $D400. So the version is checked
+# here rather than left to fail on the target.
+def zx0_version(cmd):
+    try:
+        out = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        banner = out.stdout.decode("latin-1", "replace")
+    except OSError:
+        return None
+    for line in banner.splitlines():
+        if "ZX0 v" in line:
+            return line.split("ZX0 v", 1)[1].split(":", 1)[0].strip()
+    return None
+
+def pick_zx0():
+    candidates = []
+    override = os.environ.get("ZX0")
+    if override:
+        candidates.append(override.split())
+    if "nt" == os.name:
+        candidates.append([os.path.join("utils", "scripts", "zx0.exe")])
+    else:
+        candidates.append([os.path.join("utils", "zx0")])
+        candidates.append(["zx0"])
+    tried = []
+    for cmd in candidates:
+        version = zx0_version(cmd)
+        if version is None:
+            tried.append("%s (not found)" % " ".join(cmd))
+        elif version.startswith("1."):
+            tried.append("%s (v%s, needs v2)" % (" ".join(cmd), version))
+        else:
+            return cmd
+    sys.exit("AtariCompress: no ZX0 v2 compressor found. Tried:\n  " +
+             "\n  ".join(tried))
+
+zx0 = pick_zx0()
+
 # Read input file
 fin = io.open(xexFile, 'rb')
 data = fin.read()
@@ -66,7 +101,7 @@ while (i<len(data)):
         f.close()
         
         # Compress raw data
-        subprocess.check_call([zx0, rawFile])
+        subprocess.check_call(zx0 + ["-f", rawFile])
         f = io.open(sfxFile, 'rb')
         sfx = f.read()
         f.close()        

@@ -129,8 +129,10 @@ int main (void)
         LoadBitmap("menu.img");
 		
 		// Show menu
+#if !(defined(__ATARI__) && defined(__NETSTREAM__))
 		LoadMusic("speednik.mus");
 		PlayMusic();
+#endif
 		ShowBitmap();
 		GameMenu(); 
 		
