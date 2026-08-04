@@ -54,5 +54,8 @@ dkms.conf
 # Ignore compiled python files
 *.pyc
 
+# build dir
+build/
+
 # Custom
 ref/
