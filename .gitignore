@@ -59,3 +59,23 @@ build/
 
 # Custom
 ref/
+# cc65 intermediates: builder.py compiles unity/**/*.c to .s next to the source
+# and deletes them at the end of a successful run. A failed or partial run leaves
+# them behind, where `git add -A` will happily commit thousands of lines.
+unity/adaptors/*.s
+unity/bitmap/*.s
+unity/charmap/*.s
+unity/chunks/*.s
+unity/files/*.s
+unity/geom/*.s
+unity/graphics/*.s
+unity/math/*.s
+unity/network/*.s
+unity/sound/*.s
+unity/sprites/*.s
+unity/strings/*.s
+unity/widgets/*.s
+unity/targets/atari/directory.s
+unity/targets/atari/display.s
+unity/targets/atari/files.s
+unity/targets/atari/pmg.s
