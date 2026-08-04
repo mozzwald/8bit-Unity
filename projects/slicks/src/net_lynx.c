@@ -115,6 +115,17 @@ unsigned char NetOpen(void)
 		SER_BAUD_62500, SER_BITS_8, SER_STOP_1, SER_PAR_ODD, SER_HS_NONE
 	};
 
+	/* Idempotent, for the same reason as the Atari: interface.c connects once in
+	   MenuConnect() and again in MenuLogin(), and a second ENABLE NETSTREAM on a
+	   live link is a teardown, not a no-op.
+	   See ref/netstream-plan/00-constraints.md section 5. */
+	if (netOpen) {
+		NetReset();
+		rxHead = 0;
+		rxTail = 0;
+		return 1;
+	}
+
 	StopMusic();
 	NetReset();
 	rxHead = 0;

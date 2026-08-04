@@ -755,7 +755,15 @@ void MenuServers()
 
 const unsigned char  loginCol[] = { MENU_COL+2, MENU_COL+1, MENU_COL+1, MENU_COL+2, MENU_COL+1 };
 const unsigned char  loginRow[] = { MENU_ROW+2, MENU_ROW+4, MENU_ROW+6, MENU_ROW+8, MENU_ROW+9 };
+#if defined(__NETSTREAM__)
+/* Nickname only until Phase 5. CL_JOIN carries a ticket field but nothing
+   issues one yet, and clPass was never put on the wire -- prompting for a
+   password asked for something no server could check, against a site that no
+   longer exists. See ref/netstream-plan/README.md, "Race first, auth later". */
+const unsigned char *loginTxt[] = { "ENTER NICKNAME", "NAME:" };
+#else
 const unsigned char *loginTxt[] = { "PLEASE LOGIN", "USER:", "PASS:", "REGISTER AT", "8BIT-SLICKS.COM" };
+#endif
 
 // Sub-function of GameMenu()
 unsigned char MenuLogin(unsigned char serverIndex)
@@ -773,7 +781,7 @@ unsigned char MenuLogin(unsigned char serverIndex)
 #endif	
 
 	// Prompt for authentication
-	for (res=0; res<5; res++) {
+	for (res=0; res<sizeof(loginTxt)/sizeof(loginTxt[0]); res++) {
 		txtX = loginCol[res];
 		txtY = loginRow[res];
 		PrintStr(loginTxt[res]);
@@ -783,6 +791,7 @@ unsigned char MenuLogin(unsigned char serverIndex)
 	do {
 		InputField(clUser, MAX_NAME_LEN);
 	} while (!clUser[0]);
+#if !defined(__NETSTREAM__)
 	maskInput = 1;
 	txtY = MENU_ROW+6;
 	txtX = MENU_COL+6;
@@ -790,6 +799,7 @@ unsigned char MenuLogin(unsigned char serverIndex)
 		InputField(clPass, 10);	
 	} while (!clPass[0]);
 	maskInput = 0;
+#endif
 	
 #if defined __LYNX__ 
 	WriteEEPROM();

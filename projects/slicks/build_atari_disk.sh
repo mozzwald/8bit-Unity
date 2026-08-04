@@ -49,17 +49,22 @@ DEFS=(-D CHUNKSIZE=0x0001 -D SPRITEFRAMES=18 -D SPRITEWIDTH=8 -D SPRITEHEIGHT=10
       -D NETSTREAM -D "INPUT_BUFSIZE=$RXRING" -D __DECRUNCH__)
 
 echo "==> unity library"
-if [ ! -f "$LIB" ] || [ -n "${SLICKS_REBUILD_LIB:-}" ]; then
-	# builder.py emits this as a long flat list; reuse the one it generated.
-	if [ ! -f build/slicks-demo-atari64k.sh ]; then
-		echo "ERROR: build/slicks-demo-atari64k.sh not found -- run builder.py once" >&2
-		exit 1
-	fi
-	sed -n '12,178p' build/slicks-demo-atari64k.sh \
-		| sed "s/-D SPRITEHEIGHT=10/-D SPRITEHEIGHT=10 -D SPRITEDATA=$SPRITEDATA/" \
-		> "$WORK/lib.sh"
-	bash "$WORK/lib.sh" > "$WORK/lib.log" 2>&1 || { tail -20 "$WORK/lib.log" >&2; exit 1; }
+# Always rebuilt. It is compiled with SPRITEDATA and the __NETSTREAM__ defines,
+# so a copy left over from a different configuration links cleanly and fails on
+# hardware -- silently, and a long way from the cause.
+if [ ! -f build/slicks-demo-atari64k.sh ]; then
+	echo "ERROR: build/slicks-demo-atari64k.sh not found -- run builder.py once" >&2
+	exit 1
 fi
+sed -n '12,178p' build/slicks-demo-atari64k.sh \
+	| sed "s/-D SPRITEHEIGHT=10/-D SPRITEHEIGHT=10 -D SPRITEDATA=$SPRITEDATA/" \
+	> "$WORK/lib.sh"
+bash "$WORK/lib.sh" > "$WORK/lib.log" 2>&1 || { tail -20 "$WORK/lib.log" >&2; exit 1; }
+
+# builder.py deletes these at the end of its run; a partial run leaves them in
+# the source tree, where they are neither wanted nor tracked.
+sed -n '180p' build/slicks-demo-atari64k.sh | tr ' ' '\n' | grep -E '\.(s|o)$' \
+	| while read -r stale; do [ -f "$stale" ] && rm -f "$stale"; done || true
 
 echo "==> game  (server $HOST:$PORT)"
 cl65 -o "$WORK/netstrm.xex" -m "build/[maps]/slicks-demo-atari64k-netstrm.map" \

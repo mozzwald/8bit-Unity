@@ -42,6 +42,17 @@ static unsigned int swap16(unsigned int value)
 
 unsigned char NetOpen(void)
 {
+	/* Idempotent. interface.c opens the stream once from MenuConnect() to fetch
+	   the room list, then MenuLogin() calls ServerConnect() again before joining.
+	   Re-issuing ENABLE NETSTREAM asserts CMD on a link the FujiNet has already
+	   switched to raw streaming, which tears the socket down for good
+	   (ref/netstream-plan/00-constraints.md section 1). Drop the stale RX bytes
+	   and keep the stream we have. */
+	if (netOpen) {
+		NetReset();
+		return 1;
+	}
+
 	/* RMT drives all four POKEY channels and AUDCTL. Channels 3 and 4 are the
 	   NetStream bit clock, so music and the stream cannot coexist. Stopping it
 	   here means no future call path can reintroduce it behind our back.
