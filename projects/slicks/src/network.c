@@ -199,12 +199,25 @@ unsigned char ServerEvent()
 {
 	unsigned char event = netFrame.payload[0];
 	unsigned char i, n;
+	unsigned int  ticks;
 
 	switch (event) {
 	case EVENT_RACE:
 	case EVENT_MAP:
 		svMap = netFrame.payload[2];
 		svStep = netFrame.payload[3];
+		break;
+
+	case EVENT_LAP:
+		/* The server times laps, because game.c:834 only does so in MODE_LOCAL:
+		   online clients advance way/lap but never compute a time. data1/data2
+		   carry the lap in client ticks, which is the unit PrintBestLap()
+		   divides by TCK_PER_SEC (interface.c:474). */
+		i = netFrame.payload[1];
+		if (i < MAX_PLAYERS) {
+			ticks = netFrame.payload[2] | (((unsigned int)netFrame.payload[3]) << 8);
+			if (ticks && (!lapBest[i] || ticks < lapBest[i])) { lapBest[i] = ticks; }
+		}
 		break;
 
 	case EVENT_CHAT:

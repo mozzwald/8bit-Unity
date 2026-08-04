@@ -33,6 +33,12 @@ type Slot struct {
 	lapBest  uint16
 	finished bool
 	position byte
+
+	// lapStart timestamps the last waypoint-0 crossing, so the next one can be
+	// timed. navRejects counts CL_FRAMEs whose navigation fields could not have
+	// followed the previous ones.
+	lapStart   time.Time
+	navRejects uint16
 }
 
 func (slot *Slot) occupied() bool { return slot.session != nil }
@@ -50,8 +56,10 @@ type Room struct {
 	mapID   byte
 	lapGoal byte
 
-	// stateUntil gates the timed RESULTS -> WARMUP transition.
+	// stateUntil gates the timed RESULTS -> WARMUP transition, and raceUntil
+	// bounds a race nobody finishes.
 	stateUntil time.Time
+	raceUntil  time.Time
 }
 
 func newRoom(index byte, name string) *Room {

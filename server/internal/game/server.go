@@ -66,6 +66,11 @@ func (server *Server) tickRoom(room *Room) {
 	room.mu.Lock()
 	defer room.mu.Unlock()
 
+	if room.step == proto.StepRace && !room.raceUntil.IsZero() && time.Now().After(room.raceUntil) {
+		log.Printf("%s: race timed out on %s", room.Name(), room.trackName())
+		room.enterResultsLocked(time.Now())
+	}
+
 	if room.step == stepResults && time.Now().After(room.stateUntil) {
 		room.step = proto.StepWarmup
 		room.resetCarsLocked()
@@ -101,6 +106,8 @@ func (room *Room) resetCarsLocked() {
 		slot.finished = false
 		slot.position = 0
 		slot.lapBest = 0
+		slot.lapStart = time.Time{}
+		slot.navRejects = 0
 	}
 }
 
@@ -216,10 +223,47 @@ func (server *Server) handleCarFrame(session *transport.Session, frame proto.Fra
 	}
 	room.mu.Lock()
 	defer room.mu.Unlock()
-	if _, slot := room.slotOf(session); slot != nil {
-		slot.car = update.Car
-		slot.joy = update.Joy
+	index, slot := room.slotOf(session)
+	if slot == nil {
+		return
 	}
+
+	previous := slot.car
+	slot.car = update.Car
+	slot.joy = update.Joy
+
+	// Navigation is only meaningful once the lights are out; the client does not
+	// advance Vehicle.way during warmup either (game.c:824).
+	if room.step != proto.StepRace {
+		return
+	}
+
+	now := time.Now()
+	progress := room.trackLapLocked(slot, previous, update.Car, now)
+	if progress.completed {
+		room.broadcast(proto.SVEvent, proto.Event{
+			Event: proto.EventLap,
+			Slot:  index,
+			Data1: byte(progress.lapTicks),
+			Data2: byte(progress.lapTicks >> 8),
+		}.Marshal())
+	}
+	if progress.finished {
+		room.finishLocked(slot)
+		log.Printf("%s: slot %d finished %s in position %d (best lap %d ticks)",
+			room.Name(), index, room.trackName(), slot.position, slot.lapBest)
+		if room.raceOverLocked() {
+			room.enterResultsLocked(now)
+		}
+	}
+}
+
+// trackName is the current map's name, for logging.
+func (room *Room) trackName() string {
+	if int(room.mapID) >= len(Tracks) {
+		return "?"
+	}
+	return Tracks[room.mapID].Name
 }
 
 func (server *Server) handleEvent(session *transport.Session, frame proto.Frame) {
@@ -242,6 +286,15 @@ func (server *Server) handleEvent(session *transport.Session, frame proto.Frame)
 	switch event.Event {
 	case proto.EventRace:
 		room.step = proto.StepRace
+		room.raceUntil = time.Now().Add(RaceTimeout)
+		for _, entry := range room.slots {
+			if entry.occupied() {
+				entry.finished = false
+				entry.position = 0
+				entry.lapBest = 0
+				entry.lapStart = time.Time{}
+			}
+		}
 		event.Data1, event.Data2 = room.mapID, room.step
 	case proto.EventMap:
 		room.mapID = (room.mapID + 1) % MapCount

@@ -830,12 +830,17 @@ char GameLoop()
 						// Increment laps
 						iCar->lap += 1;
 						
-						// Local: Process lap
-						if (gameMode == MODE_LOCAL && iCar->lap > 0) {							
+						// Lap counter and sound apply in both modes: online, the lap time and
+						// the finish come from the server as EVENT_LAP / EVENT_MAP, but the
+						// display still has to follow the local car.
+						if (iCar->lap > 0) {
 							// Play lap sound and update UI
 							BleepSFX(128); 
 							PrintLap(i);
-							
+						}
+
+						// Local: Process lap
+						if (gameMode == MODE_LOCAL && iCar->lap > 0) {
 							// Compute lap time
 							lapTime = gameClock - lapClock[i];
 							lapClock[i] = gameClock;
