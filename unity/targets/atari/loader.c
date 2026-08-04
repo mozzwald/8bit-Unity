@@ -9,6 +9,17 @@ int main (void)
 {
     unsigned char xSize, ySize, key;
 
+#if defined __NETSTREAM__ && !defined(__HUB__) && !defined(__IP65__) && !defined(__FUJINET__)
+    // Only one target on the disk, so there is nothing to choose. Launch it
+    // straight away rather than making every boot wait on a one-item menu.
+    // The game still goes through xbios_run_file(): an atarixl program cannot
+    // be merged into XAUTORUN, because its shadow-RAM prep runs mid-load and
+    // leaves the boot loader without the OS ROM it is reading sectors with.
+    FileSet("netstrm.xex");
+    xbios_run_file();
+    return EXIT_SUCCESS;
+#else
+
 	// Set text mode colors
     textcolor(COLOR_WHITE);
     bordercolor(COLOR_BLACK);
@@ -91,7 +102,8 @@ int main (void)
 #endif
 		}
 	}
-		
+
     // Done
     return EXIT_SUCCESS;
+#endif
 }

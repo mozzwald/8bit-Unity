@@ -55,7 +55,9 @@ extern unsigned int bestLapTime[];
 int main (void) 
 {
 	unsigned char carryon = 0;
+#if !defined(__NETSTREAM__)
 	clock_t bannerClock;
+#endif
 
 	// Reset screen
 #ifndef __LYNX__	
@@ -64,9 +66,13 @@ int main (void)
     bgcolor(COLOR_BLACK);
 #endif
 
-	// Show banner
+	// Show banner. Skipped for NetStream: it is a ten second wait on a
+	// storefront for a game that is being iterated on, and it costs a
+	// bitmap load from disk every boot.
 	InitBitmap();
+#if !defined(__NETSTREAM__)
     LoadBitmap("promo.img");
+#endif
 #if defined(__NES__) || defined(__ORIC__)	
   #if defined(__NES__)
 	txtX = 0; inkColor = WHITE;
@@ -81,10 +87,12 @@ int main (void)
   #endif
 #endif
 	ShowBitmap();
+#if !defined(__NETSTREAM__)
 	bannerClock = clock()+10*TCK_PER_SEC;
     while (clock()<bannerClock)
 		if (kbhit()) { cgetc(); break; }
-	HideBitmap();	
+#endif
+	HideBitmap();
 	
 	// Setup sprites
 #if defined(__ATARI__)

@@ -1444,9 +1444,11 @@ class Application:
                     fp.write('\n')
                 
                 # Include a loader for multi-adaptor projects and NetStream.
-                # NetStream's xBIOS path must load the raw netstrm.xex from
-                # disk; merging that program directly into XAUTORUN skips the
-                # file-launch contract used by the handler.
+                # NetStream's xBIOS path must load the raw netstrm.xex from disk:
+                # merging an atarixl program into XAUTORUN means the boot loader
+                # runs its shadow-RAM prep mid-load and never reaches main().
+                # The NetStream loader skips its menu, so there is nothing to sit
+                # through -- see unity/targets/atari/loader.c.
                 if len(networkOptions) > 1 or netstreamEnabled:
                     if target == '48k':
                         symbols = '-Cl -O -t atari '
@@ -1490,9 +1492,8 @@ class Application:
                 fp.write(Remove(buildFolder + '/atari/*.bin'))
                 fp.write(Remove(buildFolder + '/atari/*.raw'))
                 fp.write(Remove(buildFolder + '/atari/*.zx0'))
-                # Preserve raw NetStream XEX files.  The NetStream loader
-                # starts netstrm.xex through xBIOS; deleting it produces an
-                # ATR that reaches the selector but cannot start the game.
+                # Merged into XAUTORUN, so the loose .xex is dead weight -- except
+                # under NetStream, where the loader launches it from disk.
                 if len(networkOptions) == 1 and not netstreamEnabled:
                     fp.write(Remove(buildFolder + '/atari/*.xex'))
                 fp.write('\n\n')                
