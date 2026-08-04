@@ -189,6 +189,7 @@
 #define NET_CONTROL (LEN_CONTROL-1)
 
 // Network definitions
+#define MAX_NAME_LEN 8
 #define CL_ERROR  0
 #define CL_LIST   1
 #define CL_JOIN   2

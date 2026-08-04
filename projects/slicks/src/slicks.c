@@ -1,5 +1,6 @@
 
 #include "definitions.h"
+#include "net_proto.h"
 
 // Color definitions
 #if defined __APPLE2__
@@ -140,8 +141,19 @@ int main (void)
 		
 		// Loop through map list
 		while (1) {			
-			// Load map and navigation
+			// Load map and navigation.
+			// On Atari the map bitmap and .nav come off disk, which needs the
+			// SIO bus the NetStream is holding. NetSuspend() drops MOTOR only,
+			// so the socket and netstreamActive survive the load; NetResume()
+			// reasserts it. No re-enable command, no re-REGISTER.
+			// See ref/netstream-plan/00-constraints.md section 1.
+		#ifdef __NETSTREAM__
+			if (gameMode == MODE_ONLINE) { NetSuspend(); }
+		#endif
 			GameInit(mapList[gameMap]);
+		#ifdef __NETSTREAM__
+			if (gameMode == MODE_ONLINE) { NetResume(); }
+		#endif
 
 			// Run game
 			InitSFX();

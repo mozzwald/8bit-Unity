@@ -35,9 +35,9 @@
  *
  */
 
-#ifdef __ATARIXL__
-  #pragma code-name("SHADOW_RAM")
-#endif
+/* Keep file-name preparation below the OS ROM. The NetStream build needs 304
+   more bytes in HIDDEN_RAM; these routines do not require ROM to be banked
+   out, unlike the display code that remains in SHADOW_RAM. */
 
 // Externals: see xbios.s
 extern unsigned char __fastcall__ xbios_open_file(void);

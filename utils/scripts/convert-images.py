@@ -126,7 +126,7 @@ def create_indexed_image_error_diffusion(original, rgb_palette):
     dith_err = [0, 0, 0]
     for y in range(0, original.size[1]):
         # Will run from left to right on even y, and right to left in odd y.
-        xrange = range(0, original.size[0])
+        xrange = list(range(0, original.size[0]))
         if y % 2 != 0:
             xrange = reversed(xrange)
 
@@ -158,7 +158,7 @@ def create_indexed_image(original, rgb_palette, dither):
 
 def convert_image_file(input_name, plaforms=PLATFORM_NAMES, resample='nearest', dither='none'):
     """Reads the input image and converts it to the specified platforms."""
-    print('Processing ' + input_name)    
+    print(('Processing ' + input_name))    
 
     (input_dir, input_filename) = ntpath.split(input_name)
     input_base_name = ntpath.splitext(input_filename)[0]
@@ -169,7 +169,7 @@ def convert_image_file(input_name, plaforms=PLATFORM_NAMES, resample='nearest', 
     for platform in plaforms:
         target_name = ntpath.join(input_dir, input_base_name + '-' + platform + '.png')
         target_name = ntpath.abspath(target_name)
-        print('Generating ' + target_name)
+        print(('Generating ' + target_name))
 
         ((target_w, target_h), left_margin, rgb_palette) = PLATFORM_INFOS.get(platform)
 

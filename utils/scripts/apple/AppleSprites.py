@@ -95,4 +95,4 @@ try:
     f1.close()
 
 except:
-    print "Error: cannot convert " + input + "... (is it a 140x192 PNG file with 6 or 16 color palette?)"
+    print("Error: cannot convert " + input + "... (is it a 140x192 PNG file with 6 or 16 color palette?)")

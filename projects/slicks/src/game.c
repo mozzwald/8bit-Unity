@@ -1,5 +1,6 @@
 
 #include "definitions.h"
+#include "net_proto.h"
 
 // Navigation mask
 #define TERRAIN_ROAD 0	
@@ -39,7 +40,7 @@ extern unsigned char numWays;
 
 // See network.c
 extern unsigned char clIndex;
-extern unsigned char clName[MAX_PLAYERS][5];
+extern unsigned char clName[MAX_PLAYERS][MAX_NAME_LEN+1];
 extern unsigned char svMap, svStep; 
 extern char chatBuffer[20];
 
@@ -523,6 +524,11 @@ char GameLoop()
 		ticks = (int)(clock()-gameClock);
 		gameClock = clock();
 		#if defined __LYNX__
+			// Drain the 256-byte ComLynx driver ring before the redraw: it is
+			// small and UpdateDisplay() blocks long enough to overflow it.
+		  #ifdef __NETSTREAM__
+			if (gameMode == MODE_ONLINE) { NetPumpRX(); }
+		  #endif
 			UpdateDisplay(); // Refresh Lynx screen
 		#endif
 	

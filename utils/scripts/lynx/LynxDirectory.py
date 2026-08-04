@@ -95,4 +95,4 @@ try:
                         lastFilenr = 'CHK' + str(i)
                         lastEntry  = 'chk' + str(i)
 except:
-    print 'Error: cannot generate Lynx directory file'
+    print('Error: cannot generate Lynx directory file')

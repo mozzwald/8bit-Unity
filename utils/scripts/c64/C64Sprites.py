@@ -36,7 +36,7 @@ output = sys.argv[2]
 img1 = Image.open(input)
 rawdata = list(img1.getdata())
 colors = max(rawdata)
-print "Sprite sheet size: {%i,%i}; Number of colors: %i" % (img1.size[0], img1.size[1], colors)
+print("Sprite sheet size: {%i,%i}; Number of colors: %i" % (img1.size[0], img1.size[1], colors))
 
 ################################
 # Rearrange into 12 * 21 blocks

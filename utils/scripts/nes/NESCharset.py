@@ -43,7 +43,7 @@ f1.close()
 # Read source bitmap and palette
 img1 = Image.open(input)
 colors = max(list(img1.getdata()))
-print "Charset size: {%i,%i}; Number of colors: %i" % (img1.size[0], img1.size[1], colors)
+print("Charset size: {%i,%i}; Number of colors: %i" % (img1.size[0], img1.size[1], colors))
 
 #######################################
 # Encode data to Charset file

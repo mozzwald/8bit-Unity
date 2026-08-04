@@ -23,8 +23,8 @@ extern Vehicle cars[MAX_PLAYERS];
 // See network.c
 extern unsigned int packet;
 extern unsigned char svMap, svStep; 
-extern unsigned char clName[MAX_PLAYERS][5];
-extern unsigned char clIndex, clUser[5], clPass[13];
+extern unsigned char clName[MAX_PLAYERS][MAX_NAME_LEN+1];
+extern unsigned char clIndex, clUser[MAX_NAME_LEN+1], clPass[13];
 extern char networkReady, chatBuffer[20], udpBuffer[28];
 
 #if defined __NES__
@@ -620,7 +620,7 @@ void PrintScores()
 				if (i == 0) { string = "WIN"; } else { string = "LOSE"; } 
 			}
 			
-			txtY += 2; txtX = SCORES_COL+3; 
+			txtY += 2; txtX = SCORES_COL;
 			inkColor = inkColors[j];
 		#if defined __ORIC__
 			SetAttributes(inkColor);
@@ -779,7 +779,7 @@ unsigned char MenuLogin(unsigned char serverIndex)
 	txtY = MENU_ROW+4;
 	txtX = MENU_COL+6;    
 	do {
-		InputField(clUser, 4);
+		InputField(clUser, MAX_NAME_LEN);
 	} while (!clUser[0]);
 	maskInput = 1;
 	txtY = MENU_ROW+6;
@@ -862,9 +862,16 @@ void MenuConnect()
 	unsigned char state = 1;
 	unsigned char *report;
 	txtX = MENU_COL+2; txtY = MENU_ROW+2;
-#ifdef NETCODE
+#if defined(NETCODE) || defined(__NETSTREAM__)
 	PrintStr("NETWORK INIT");
-	state = InitNetwork();
+	#if defined(__NETSTREAM__)
+		/* NetStream has no DHCP/network stack. Opening it sends FujiNet's
+		   ENABLE NETSTREAM command and waits for its ACK. */
+		ServerConnect();
+		state = networkReady ? 0 : ADAPTOR_ERR;
+	#else
+		state = InitNetwork();
+	#endif
 	if (state == ADAPTOR_ERR) {
 		report = "ADAPTOR ERROR";	
 	  #ifdef __ULTIMATE__
@@ -1094,8 +1101,11 @@ void GameMenu()
 			// Display ONLINE menu
 			MenuTab(1);
 			
-		#if defined(__ORIC__) || defined(__FUJINET__) || defined(__ULTIMATE__)
+		#if defined(__ORIC__) || defined(__FUJINET__) || defined(__ULTIMATE__) || defined(__NETSTREAM__)
 			// FujiNet, Ultimate and VIA are not happy with music...
+			// Under NETSTREAM the RMT player would also drive POKEY channels 3
+			// and 4, which are the stream's bit clock. NetOpen() stops music
+			// again unconditionally so no future call path can restart it.
 			StopMusic();
 		#endif
 
@@ -1118,7 +1128,9 @@ void GameMenu()
 				} else {
 					i = lastchar - 49;
 				}
-				if (networkReady && i>=0 && i<13) {
+				// The list is capped at 12 entries by MIN(n,12) above, so the
+				// valid indices are 0..11 -- i<13 let one past the end through.
+				if (networkReady && i>=0 && i<12) {
 					// Try to Login...
 					if (MenuLogin(i)) {
 						// Start game

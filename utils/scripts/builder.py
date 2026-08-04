@@ -24,12 +24,29 @@
  *   specific prior written permission.
 """
 
-from Tkinter import *
-import tkMessageBox as messagebox
+from tkinter import *
+import tkinter.messagebox as messagebox
 import DragDropListbox as DragDropListbox
-from tkFileDialog import askopenfilename, asksaveasfilename
+from tkinter.filedialog import askopenfilename, asksaveasfilename
 from PIL import Image, ImageTk
 import os, pickle, pygubu, sys, collections, json, codecs
+
+# FujiNet NetStream build settings. There is no GUI checkbutton for these -- the
+# GUI is only needed to convert assets, and projects/slicks/build_netstream.sh
+# drives the link step through the environment instead. Setting SLICKS_NETSTREAM
+# adds a NetStream target to the Atari build and switches the Lynx build off the
+# 8bit-Hub adaptor. See ref/netstream-plan/phase-2-atari-client.md.
+netstreamEnabled = os.environ.get('SLICKS_NETSTREAM', '0') == '1'
+netstreamHost    = os.environ.get('SLICKS_SERVER_HOST', '192.168.1.120')
+netstreamPort    = os.environ.get('SLICKS_SERVER_PORT', '8320')
+# Pinned at 19200 so a MOTOR-only suspend is baud-transparent; not a tuning knob.
+# See ref/netstream-plan/00-constraints.md section 1, trap 2.
+netstreamBaud    = os.environ.get('SLICKS_BAUD', '19200')
+# The XL loader keeps a temporary character generator at $7C20 while it loads
+# the program. A 512-byte ring extends BSS through $7CCF and corrupts it.
+# 256 bytes holds several complete protocol frames and stays below $7C20.
+netstreamRxRing  = os.environ.get('SLICKS_RX_RING', '256')
+lynxNetwork      = 'NetStream' if netstreamEnabled else 'Hub'
 
 # Script extension    
 if "nt" == os.name:
@@ -51,17 +68,20 @@ if "nt" == os.name:
     cc65 = "utils\\cc65\\bin\\cc65"
     cl65 = "utils\\cc65\\bin\\cl65"
     java = "utils\\java\\bin\\java"
-    py27 = "utils\\py27\\python"
+    py27 = "py -3"
     icon = "builder.ico"
 else:
     addr = "\\"
     sext = ".sh"
     cl15 = "wine utils/scripts/c64/c1541.exe"
     sidr = "wine utils/scripts/c64/sidreloc.exe"
-    datr = "wine utils/scripts/atari/dir2atr.exe"
-    ex30 = "wine utils/scripts/exomizer-3.0.2.exe"
-    ex31 = "wine utils/scripts/exomizer-3.1.0.exe"
-    mads = "wine utils/scripts/atari/mads.exe"
+    # Native Linux builds must not depend on the bundled Windows tools.
+    datr = "dir2atr"
+    # Exomizer has a native Linux build; Wine is both unnecessary and unusable
+    # in headless/sandboxed environments.
+    ex30 = os.environ.get("EXOMIZER", "exomizer")
+    ex31 = os.environ.get("EXOMIZER", "exomizer")
+    mads = "mads"
     famt = "wine utils/scripts/nes/text2data.exe"
     orih = "wine utils/scripts/oric/header.exe"
     orim = "wine utils/scripts/oric/ym2mym.exe"
@@ -72,7 +92,7 @@ else:
     cc65 = "cc65"
     cl65 = "cl65"
     java = "java"
-    py27 = "python2"
+    py27 = "python3"
     icon = "@builder.xbm"
             
 cCore = [ 'adaptors/joystick.c', 'adaptors/mouse.c', 'geom/geom2d.c', 'math/dot.c', 'sound/music.c', 'sound/sfx.c',
@@ -223,7 +243,7 @@ while i<len(sys.argv):
         useGUI = Str2Bool(sys.argv[i+1])
     i += 1
 
-print "projectFile: ", projectFile, " buildFolder: ", buildFolder, " callEmu: ", callEmu, " useGUI: ", useGUI
+print("projectFile: ", projectFile, " buildFolder: ", buildFolder, " callEmu: ", callEmu, " useGUI: ", useGUI)
 
 class Application:
 
@@ -497,7 +517,7 @@ class Application:
             # Unpickle data
             with open(filename, "r") as fp:
                 # Version number
-                print "File version: " + str(pickle.load(fp))
+                print("File version: " + str(pickle.load(fp)))
                 data = pickle.load(fp)
                                 
                 # Entry boxes
@@ -1069,7 +1089,7 @@ class Application:
                 if len(spritesSHR) > 0:
                     sprites = spritesSHR        
         
-            with open('../../' + buildFolder+'/'+diskname+"-apple"+target+sext, "wb") as fp:
+            with open('../../' + buildFolder+'/'+diskname+"-apple"+target+sext, "w") as fp:
                 # Info
                 fp.write('echo off\n\n')
                 fp.write('mkdir apple\n')            
@@ -1233,15 +1253,23 @@ class Application:
         chunks = list(self.listbox_AtariChunks.get(0, END))
         music = list(self.listbox_AtariMusic.get(0, END))
         chunkSize = self.entry_AtariChunkMemory.get().replace('$0000','$0001')
-        networkOptions = []
-        if self.checkbutton_AtariNetwork8bitHub.get():
-            networkOptions.append('8bit-Hub')
-        if self.checkbutton_AtariNetworkDragonCart.get():
-            networkOptions.append('DragonCart')
-        if self.checkbutton_AtariNetworkFujinet.get():
-            networkOptions.append('Fujinet')
-        if len(networkOptions) == 0:
-            networkOptions.append('No-Net')                    
+        # NetStream uses xBIOS to select and run its own executable.  It is
+        # not compatible with the legacy multi-adaptor loader, whose system
+        # check consumes the same startup path.  The environment switch is a
+        # dedicated NetStream build, so deliberately ignore the project's
+        # 8bit-Hub/DragonCart/FujiNet selections in this mode.
+        if netstreamEnabled:
+            networkOptions = ['NetStream']
+        else:
+            networkOptions = []
+            if self.checkbutton_AtariNetwork8bitHub.get():
+                networkOptions.append('8bit-Hub')
+            if self.checkbutton_AtariNetworkDragonCart.get():
+                networkOptions.append('DragonCart')
+            if self.checkbutton_AtariNetworkFujinet.get():
+                networkOptions.append('Fujinet')
+            if len(networkOptions) == 0:
+                networkOptions.append('No-Net')
         
         # Build 48 and 64k Versions
         for target in ['48k', '64k']:
@@ -1252,7 +1280,7 @@ class Application:
             else:
                 graphics = 'single'
         
-            with open('../../' + buildFolder+'/'+diskname+"-atari"+target+sext, "wb") as fp:
+            with open('../../' + buildFolder+'/'+diskname+"-atari"+target+sext, "w") as fp:
                 # Info
                 fp.write('echo off\n\n')
                 fp.write('mkdir atari\n')            
@@ -1283,6 +1311,17 @@ class Application:
                         sTarget.append('targets/atari/fujiIRQ.s')
                         symbols += ' -D __FUJINET__'
                         executable = 'fujinet.xex'
+                    elif network == 'NetStream':
+                        # FujiNet NetStream: a raw byte stream over SIO, handled by
+                        # the vendored CA65 handler rather than fujinet-lib.
+                        # See ref/netstream-plan/phase-2-atari-client.md
+                        # -D applies to both cc65 and ca65.  A quoted C string
+                        # is not a valid ca65 definition, so keep host/port C-only.
+                        symbols += ' -D __NETSTREAM__ -D SLICKS_BAUD=' + netstreamBaud
+                        # cl65 forwards -D to both cc65 and ca65; --asm-define
+                        # is not a ca65 option in the cc65 toolchain shipped here.
+                        symbols += ' -D NETSTREAM -D INPUT_BUFSIZE=' + netstreamRxRing
+                        executable = 'netstrm.xex'
                     elif network == 'No-Net': 
                         executable = 'nonet.xex'  
                         
@@ -1304,9 +1343,18 @@ class Application:
                         symbols += ' -Wl -D__SYSTEM_CHECK__=1 ' # Loader will perform that check
                     symbols += ' -Wl -D,__STACKSIZE__=' + addr + '$0400 -Wl -D,CHUNKSIZE=' + addr + chunkSize
                     comp = cl65 + ' -o ' + buildFolder + '/atari/' + executable + ' -m ' + buildFolder + '/[maps]/' + diskname.lower() + '-atari' + target + '-' + executable[0:-4] + '.map ' + symbols + ' -I unity '
+                    if network == 'NetStream':
+                        comp += ' -Wc \'-DSLICKS_SERVER_HOST="' + netstreamHost + '"\' -Wc -DSLICKS_SERVER_PORT=' + netstreamPort + ' '
+                        # cl65's -D is a C preprocessor definition. Forward
+                        # these separately to ca65 so netstream.s gets the
+                        # configured ring size and POKEY.s sees NETSTREAM.
+                        comp += ' --asm-define NETSTREAM --asm-define INPUT_BUFSIZE=' + netstreamRxRing + ' '
                     for item in code:
                         comp += (item + ' ')
-                    comp += 'unity/targets/atari/POKEY.s ' + library + ' '
+                    comp += 'unity/targets/atari/POKEY.s '
+                    if network == 'NetStream':
+                        comp += 'unity/targets/atari/netstream.s '
+                    comp += library + ' '
                     if network == 'DragonCart':
                         if target == '48k':
                             if self.combobox_AtariNetworkProtocols.get() == 'TCP/UDP':
@@ -1319,10 +1367,17 @@ class Application:
                             else:
                                 comp += 'unity/adaptors/ip65.lib unity/adaptors/ip65_atarixl.lib'
                     fp.write(comp + '\n')
-                    fp.write(py27 + ' utils/scripts/atari/AtariCompress.py ' + buildFolder + '/atari/' + executable + ' \n\n')
+                    # xBIOS RUN_FILE consumes the project's ZX0-wrapped XEX
+                    # format.  Keep the wrapper for NetStream too; the file
+                    # itself is retained on disk below for the loader to run.
+                    fp.write(py27 + ' utils/scripts/atari/AtariCompress.py ' + buildFolder + '/atari/' + executable + ' \n')
+                    fp.write('\n')
                 
-                # Include loader program?
-                if len(networkOptions) > 1:                                    
+                # Include a loader for multi-adaptor projects and NetStream.
+                # NetStream's xBIOS path must load the raw netstrm.xex from
+                # disk; merging that program directly into XAUTORUN skips the
+                # file-launch contract used by the handler.
+                if len(networkOptions) > 1 or netstreamEnabled:
                     if target == '48k':
                         symbols = '-Cl -O -t atari '
                     else:
@@ -1333,20 +1388,24 @@ class Application:
                         symbols += '-D __IP65__ '
                     if 'Fujinet' in networkOptions:
                         symbols += '-D __FUJINET__ '                
+                    if netstreamEnabled:
+                        symbols += '-D __NETSTREAM__ '
                     fp.write(cl65 + ' -o ' + buildFolder + '/atari/loader.bin ' + symbols + ' -I unity unity/targets/atari/loader.c ' + library + '\n')
-                    fp.write(py27 + ' utils/scripts/atari/AtariCompress.py ' + buildFolder + '/atari/loader.bin \n\n')
+                    fp.write(py27 + ' utils/scripts/atari/AtariCompress.py ' + buildFolder + '/atari/loader.bin \n')
+                    fp.write('\n')
 
                 # RMT player
                 if target == '64k':
                     fp.write(mads + ' -o:' + buildFolder + '/atari/rmt.bin unity/targets/atari/RMT.a65 \n')
-                    fp.write(py27 + ' utils/scripts/atari/AtariCompress.py ' + buildFolder + '/atari/rmt.bin \n\n')
+                    fp.write(py27 + ' utils/scripts/atari/AtariCompress.py ' + buildFolder + '/atari/rmt.bin \n')
+                    fp.write('\n')
 
                 # BASIC disabler
                 fp.write(cl65 + ' -o ' + buildFolder + '/atari/basicoff.bin -t atari -C atari-asm.cfg unity/targets/atari/BASICOFF.s \n\n')
 
                 # Merging
                 cmd = py27 + ' utils/scripts/atari/AtariMerge.py ' + buildFolder + '/atari/xautorun ' + buildFolder + '/atari/basicoff.bin '
-                if len(networkOptions) > 1:  
+                if len(networkOptions) > 1 or netstreamEnabled:
                     cmd += buildFolder + '/atari/loader.bin '
                 else:
                     cmd += buildFolder + '/atari/' + executable + ' '
@@ -1358,7 +1417,10 @@ class Application:
                 fp.write(Remove(buildFolder + '/atari/*.bin'))
                 fp.write(Remove(buildFolder + '/atari/*.raw'))
                 fp.write(Remove(buildFolder + '/atari/*.zx0'))
-                if len(networkOptions) == 1:  
+                # Preserve raw NetStream XEX files.  The NetStream loader
+                # starts netstrm.xex through xBIOS; deleting it produces an
+                # ATR that reaches the selector but cannot start the game.
+                if len(networkOptions) == 1 and not netstreamEnabled:
                     fp.write(Remove(buildFolder + '/atari/*.xex'))
                 fp.write('\n\n')                
                                                 
@@ -1437,7 +1499,7 @@ class Application:
             networkOptions.append('No-Net')                    
         files = []
             
-        with open('../../' + buildFolder+'/'+diskname+"-c64"+sext, "wb") as fp:
+        with open('../../' + buildFolder+'/'+diskname+"-c64"+sext, "w") as fp:
             # Info
             fp.write('echo off\n\n')
             fp.write('setlocal enableextensions enabledelayedexpansion\n\n')
@@ -1605,7 +1667,7 @@ class Application:
         music = list(self.listbox_LynxMusic.get(0, END))
         chunkSize = self.entry_LynxChunkMemory.get().replace('$0000','$0001')
         
-        with open('../../' + buildFolder+'/'+diskname+"-lynx"+sext, "wb") as fp:
+        with open('../../' + buildFolder+'/'+diskname+"-lynx"+sext, "w") as fp:
             # Info
             fp.write('echo off\n\n')
             fp.write('setlocal enableextensions enabledelayedexpansion\n\n')
@@ -1721,23 +1783,38 @@ class Application:
             
             fp.write('echo --------------- COMPILE PROGRAM ---------------\n\n')
 
-            cTarget = [ 'adaptors/hub.c', 'graphics/pixel.c', 'targets/lynx/cgetc.c', 'targets/lynx/display.c', 'targets/lynx/files.c', 'targets/lynx/keyboard.c', 'targets/lynx/screen.c', 'targets/lynx/text.c' ]
+            cTarget = [ 'graphics/pixel.c', 'targets/lynx/cgetc.c', 'targets/lynx/display.c', 'targets/lynx/files.c', 'targets/lynx/keyboard.c', 'targets/lynx/screen.c', 'targets/lynx/text.c' ]
             sTarget = [ 'graphics/scroll.s', 'strings/chars.s', 'targets/lynx/header.s', 'targets/lynx/blitCharmap.s', 'targets/lynx/serial.s', 'targets/lynx/suzy.s' ]
-            symbols = ' -D __HUB__ -D MUSICSIZE='  + self.entry_LynxMusicMemory.get().replace('$','0x') + ' -D CHUNKSIZE='  + chunkSize.replace('$','0x') + ' -D SHAREDSIZE='  + self.entry_LynxSharedMemory.get().replace('$','0x') + ' -D SPRITEFRAMES=' + self.entry_LynxSpriteFrames.get() + ' -D SPRITEWIDTH=' + self.entry_LynxSpriteWidth.get() + ' -D SPRITEHEIGHT=' + self.entry_LynxSpriteHeight.get()
+            # The Lynx branch was hardcoded to the 8bit-Hub adaptor. NetStream
+            # talks to ComLynx directly through net_lynx.c and must not link it.
+            if lynxNetwork == 'NetStream':
+                netSymbols = ' -D __NETSTREAM__'
+                # NetStream uses cc65's ComLynx serial driver, not the legacy
+                # Unity serial module (which exports a different API).
+                sTarget.remove('targets/lynx/serial.s')
+                fp.write('co65 --code-label _lynx_comlynx_ser -o ' + buildFolder + '/lynx/lynx-comlynx.s ' + '$CC65_HOME/target/lynx/drv/ser/lynx-comlynx.ser\n')
+            else:
+                cTarget.insert(0, 'adaptors/hub.c')
+                netSymbols = ' -D __HUB__'
+            symbols = netSymbols + ' -D MUSICSIZE='  + self.entry_LynxMusicMemory.get().replace('$','0x') + ' -D CHUNKSIZE='  + chunkSize.replace('$','0x') + ' -D SHAREDSIZE='  + self.entry_LynxSharedMemory.get().replace('$','0x') + ' -D SPRITEFRAMES=' + self.entry_LynxSpriteFrames.get() + ' -D SPRITEWIDTH=' + self.entry_LynxSpriteWidth.get() + ' -D SPRITEHEIGHT=' + self.entry_LynxSpriteHeight.get()
             if self.checkbutton_LynxVirtualKeyboard.get():
                 symbols += ' -D __KEYBOARD__'
 
             # Build Unity Library
-            library = buildFolder + '/[libs]/unity-lynx-hub.lib'
+            library = buildFolder + '/[libs]/unity-lynx-' + lynxNetwork.lower() + '.lib'
             BuildUnityLibrary(self, fp, '-t lynx --cpu 65SC02', symbols, cCore+cTarget, sCore+sTarget, library)
                                      
             # Compile Program 
             symbols += ' -Wl -D,MUSICSIZE=' + addr + self.entry_LynxMusicMemory.get() + ' -Wl -D,CHUNKSIZE=' + addr + chunkSize + ',-D,SHAREDSIZE=' + addr + self.entry_LynxSharedMemory.get()
-            comp = cl65 + ' -o ' + buildFolder + '/' + diskname.lower() + '-lynx.lnx -m ' + buildFolder + '/[maps]/' + diskname.lower() + '-lynx-hub.map -Cl -O -t lynx' + symbols + ' -C ' + buildFolder + '/lynx/lynx.cfg -I unity '
+            comp = cl65 + ' -o ' + buildFolder + '/' + diskname.lower() + '-lynx.lnx -m ' + buildFolder + '/[maps]/' + diskname.lower() + '-lynx-' + lynxNetwork.lower() + '.map -Cl -O -t lynx' + symbols + ' -C ' + buildFolder + '/lynx/lynx.cfg -I unity '
+            if lynxNetwork == 'NetStream':
+                comp += ' -Wc \'-DSLICKS_SERVER_HOST="' + netstreamHost + '"\' -Wc -DSLICKS_SERVER_PORT=' + netstreamPort + ' '
             for item in code:
                 comp += (item + ' ')
             for item in music:
                 comp += buildFolder + '/lynx/' + FileBase(item, '.asm') + '.asm '
+            if lynxNetwork == 'NetStream':
+                comp += buildFolder + '/lynx/lynx-comlynx.s '
             fp.write(comp + 'unity/targets/lynx/sfx.s ' + buildFolder + '/lynx/directory.asm ' + buildFolder + '/lynx/data.asm ' + library + '\n')
             fp.write('\n')
                         
@@ -1758,7 +1835,7 @@ class Application:
         maxTiles = int(self.entry_NESBitmapTiles.get())
         chunkSize = self.entry_NESChunkMemory.get().replace('$0000','$0001')
         
-        with open('../../' + buildFolder+'/'+diskname+"-nes"+sext, "wb") as fp:
+        with open('../../' + buildFolder+'/'+diskname+"-nes"+sext, "w") as fp:
             # Info
             fp.write('echo off\n\n')
             fp.write('setlocal enableextensions enabledelayedexpansion\n\n')
@@ -1892,7 +1969,7 @@ class Application:
         music = list(self.listbox_OricMusic.get(0, END))
         chunkSize = self.entry_OricChunkMemory.get().replace('$0000','$0001')
         
-        with open('../../' + buildFolder+'/'+diskname+"-oric48k"+sext, "wb") as fp:
+        with open('../../' + buildFolder+'/'+diskname+"-oric48k"+sext, "w") as fp:
             # Info
             fp.write('echo off\n\n')
             fp.write('setlocal enableextensions enabledelayedexpansion\n\n')
@@ -1932,10 +2009,10 @@ class Application:
             fp.write('echo --------------- CONVERT ASSETS ---------------  \n\n')
             
             if "nt" == os.name:
-                pyth = '..\\..\\py27\\python.exe'
+                pyth = 'py -3'
                 head = 'header.exe'
             else:
-                pyth = 'python2'
+                pyth = 'python3'
                 head = 'wine header.exe'
                 
             # Process Bitmaps / Chunks / Sprites / Shared

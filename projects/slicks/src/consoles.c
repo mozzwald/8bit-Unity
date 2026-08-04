@@ -1,5 +1,6 @@
 
 #include "definitions.h"
+#include "net_proto.h"
 
 #if defined(__LYNX__) || defined(__NES__)
 
@@ -86,7 +87,7 @@ extern char chatBuffer[20];
 		return;
 	
 	// Read user/pass
-	while (i < 20)
+	while (j < MAX_NAME_LEN+1)
 		clUser[j++] = (unsigned char)lynx_eeprom_read(i++);
 	
 	// Read best lap times
@@ -105,7 +106,7 @@ extern char chatBuffer[20];
 	unsigned char i=2, j=0;
 
 	// Write user/pass
-	while (i < 20)
+	while (j < MAX_NAME_LEN+1)
 		lynx_eeprom_write(i++, clUser[j++]);
 	
 	// Write best lap times
@@ -346,6 +347,7 @@ unsigned char MenuPause(void)
 		// In online mode, check if a race/map/timeout event occured
 		if (gameMode == MODE_ONLINE) {
 			cars[clIndex].vel = 0;
+			NetPumpRX();
 			pauseEvt = NetworkUpdate();
 			if (pauseEvt == EVENT_RACE || pauseEvt == EVENT_MAP || pauseEvt == ERR_TIMEOUT)
 				return 0;

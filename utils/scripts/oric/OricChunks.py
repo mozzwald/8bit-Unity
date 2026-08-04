@@ -62,7 +62,7 @@ for line in lines:
         
         # Compute size of chunk
         sizeLst.append(6+coords[3]*(coords[2]/6))
-        print 'Adding Chunk ', coords
+        print('Adding Chunk ', coords)
 
 #######################################
 # Output chunk data

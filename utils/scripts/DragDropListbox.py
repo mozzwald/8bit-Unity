@@ -1,7 +1,8 @@
 
-import Tkinter as Tkinter
+import tkinter as Tkinter
 
-from pygubu import BuilderObject, register_widget
+from pygubu.component.builderobject import BuilderObject
+from pygubu.api.v1 import register_widget
 
 class DragDropListbox(Tkinter.Listbox):
     """ A Tkinter listbox with drag'n'drop reordering of entries. """

@@ -290,7 +290,7 @@ def CrunchTiles(names, chars, maxTiles):
 
     #######################################
     # Sort Index of Similarity
-    indices = sorted(range(len(similar[0])), key=lambda k: similar[0][k])
+    indices = sorted(list(range(len(similar[0]))), key=lambda k: similar[0][k])
 
     #######################################
     # Inspect most similar Tiles for dropping

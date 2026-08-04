@@ -38,7 +38,7 @@ compress = sys.argv[5]
 img1 = Image.open(input)
 rawdata = list(img1.getdata())
 colors = max(rawdata)
-print "Sprite sheet size: {%i,%i}; Number of colors: %i" % (img1.size[0], img1.size[1], colors)
+print("Sprite sheet size: {%i,%i}; Number of colors: %i" % (img1.size[0], img1.size[1], colors))
 
 #######################################
 # Rearrange into Width * Height blocks
@@ -56,7 +56,7 @@ if (width%2):
 ################################
 # Convert pixel data to buffers 
 block = width*height
-frames = len(pixdata) / block
+frames = len(pixdata) // block
 data = []
 for f in range(frames):
     for h in range(0, height):
@@ -93,8 +93,8 @@ for f in range(frames):
             data[ref] = chr(bytes+1) # Overwrite placeholder
                
         else:
-            data.append(chr(width/2+1))
-            for w in range(0, width/2):
+            data.append(chr(width//2+1))
+            for w in range(0, width//2):
                 base = f*block + h*width + w*2
                 data.append(chr( (pixdata[base+0]<<4) + (pixdata[base+1]<<0) ))
     data.append(chr(0))
@@ -102,5 +102,5 @@ for f in range(frames):
 ###########################
 # Write output binary file
 f2 = io.open(output, 'wb')
-f2.write(''.join(data))
+f2.write(bytes(ord(value) for value in data))
 f2.close()

@@ -71,4 +71,4 @@ try:
                         fout.write('	CHK' + str(i) + 'DATA:  load = CHK' + str(i) + ',	  type = rw,  define = yes;\n')
                 
 except:
-    print 'Error: cannot generate Lynx config file'
+    print('Error: cannot generate Lynx config file')

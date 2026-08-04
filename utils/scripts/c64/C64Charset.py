@@ -41,7 +41,7 @@ flagFile = charFile.replace('-c64.png', '.csv')
 # Read char and font bitmaps
 charImg = Image.open(charFile)
 charRaw = list(charImg.getdata())
-print "Charset size: {%i,%i}; Colors: %i" % (charImg.size[0], charImg.size[1], max(charRaw))
+print("Charset size: {%i,%i}; Colors: %i" % (charImg.size[0], charImg.size[1], max(charRaw)))
 
 #########################
 # Allocate shared colors
@@ -58,8 +58,8 @@ if sharedColors == []:
             for i in range(0, 16):
                 if i in block:
                     distrib[i] += 1
-    popular = sorted(range(len(distrib)), key=distrib.__getitem__)[13:16]
-    order = sorted(range(len(popular)), key=popular.__getitem__)
+    popular = sorted(list(range(len(distrib))), key=distrib.__getitem__)[13:16]
+    order = sorted(list(range(len(popular))), key=popular.__getitem__)
     sharedColors = [popular[i] for i in order]
 colData = [chr(c) for c in sharedColors]
 

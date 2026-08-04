@@ -38,7 +38,8 @@ output = sys.argv[4]
 if "nt" == os.name:
     ex31 = "utils\scripts\exomizer-3.1.0.exe"
 else:
-    ex31 = "wine utils/scripts/exomizer-3.1.0.exe"
+    # Allow a locally built binary during development while defaulting to PATH.
+    ex31 = os.environ.get("EXOMIZER", "exomizer")
 
 try:
     ##############################
@@ -58,15 +59,15 @@ try:
         for x in range(160):
             # Convert PNG to INP index 
             color = pixdata[y*160+x]            
-            offset = y*40+x/4
+            offset = y*40+x//4
             shift = 6 - 2*(x%4)
             mask = 255 - (3<<shift)            
             if (x+y)%2:   # Alternate to create checker board
                 col2 = color%4 << shift
-                col1 = color/4 << shift
+                col1 = color//4 << shift
             else:
                 col1 = color%4 << shift
-                col2 = color/4 << shift
+                col2 = color//4 << shift
             buf1[offset] = (buf1[offset] & mask) | col1
             buf2[offset] = (buf2[offset] & mask) | col2  
     
@@ -81,13 +82,13 @@ try:
     if compress == 'crunch':
         # Write raw data files
         f = io.open(output.replace('.img','.raw1'), 'wb')
-        f.write(''.join([chr(0x10), chr(0xa0)]))     # Load Address: $a010         
-        f.write(''.join(buf1))
+        f.write(bytes([0x10, 0xa0]))                 # Load Address: $a010
+        f.write(bytes(ord(value) for value in buf1))
         f.close()    
         if resolution == 'double':
             f = io.open(output.replace('.img','.raw2'), 'wb')	
-            f.write(''.join([chr(0x10), chr(0x70)]))     # Load Address: $7010  
-            f.write(''.join(buf2))
+            f.write(bytes([0x10, 0x70]))                 # Load Address: $7010
+            f.write(bytes(ord(value) for value in buf2))
             f.close()    
         
         # Crunch raw data
@@ -106,10 +107,10 @@ try:
         
         # Consolidate to single file
         f = io.open(output, 'wb')	
-        f.write(''.join(palette))
-        f.write(''.join([chr(len(sfx1)%256), chr(len(sfx1)/256)])); f.write(sfx1)
+        f.write(bytes(ord(value) for value in palette))
+        f.write(bytes([len(sfx1) % 256, len(sfx1) // 256])); f.write(sfx1)
         if resolution == 'double':
-            f.write(''.join([chr(len(sfx2)%256), chr(len(sfx2)/256)])); f.write(sfx2)
+            f.write(bytes([len(sfx2) % 256, len(sfx2) // 256])); f.write(sfx2)
         f.close()    
         
         # Clean-up
@@ -122,11 +123,11 @@ try:
     else:
         # Just write raw data
         f = io.open(output, 'wb')	
-        f.write(''.join(palette))
-        f.write(''.join(buf1))
+        f.write(bytes(ord(value) for value in palette))
+        f.write(bytes(ord(value) for value in buf1))
         if resolution == 'double':
-            f.write(''.join(buf2))
+            f.write(bytes(ord(value) for value in buf2))
         f.close()    
 
-except:
-    print "Error: cannot convert " + input + "... (is it a 160x200 PNG file with 16 color palette?)"
+except Exception as exc:
+    raise RuntimeError("cannot convert %s (expected a 160x200 indexed PNG)" % input) from exc

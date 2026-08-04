@@ -39,7 +39,7 @@ output = sys.argv[3]
 if "nt" == os.name:
     ex31 = "utils\scripts\exomizer-3.1.0.exe"
 else:
-    ex31 = "wine utils/scripts/exomizer-3.1.0.exe"
+    ex31 = os.environ.get("EXOMIZER", "exomizer")
 
 def packInt(value):
     return ''.join([chr(value%256), chr(value/256)])
@@ -92,14 +92,14 @@ try:
             # Assign colours not in palette to nearest colour
             for i in range(8):
                 for j in range(4):
-                    if block[i*4+j] not in translate.keys():
+                    if block[i*4+j] not in list(translate.keys()):
                         delta = []
                         vec1 = rgb[block[i*4+j]]
                         for k in range(1,4):
-                            vec2 = rgb[translate.keys()[k]]
+                            vec2 = rgb[list(translate.keys())[k]]
                             delta.append( sqrt( (vec1[0]-vec2[0])**2 + (vec1[1]-vec2[1])**2 + (vec1[2]-vec2[2])**2 ) )
                         swap = delta.index(min(delta))+1
-                        block[i*4+j] = translate.keys()[swap]
+                        block[i*4+j] = list(translate.keys())[swap]
                                               
                   
             # Set colour indices (0-3)
@@ -161,4 +161,4 @@ try:
         f.close()
 
 except:
-    print "Error: cannot convert " + input + "... (is it a 160x200 PNG file with 16 color palette?)"
+    print("Error: cannot convert " + input + "... (is it a 160x200 PNG file with 16 color palette?)")

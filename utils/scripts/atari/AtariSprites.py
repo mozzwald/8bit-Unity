@@ -36,7 +36,7 @@ height = int(sys.argv[3])
 img1 = Image.open(input)
 rawdata = list(img1.getdata())
 colors = max(rawdata)
-print "Sprite sheet size: {%i,%i}; Number of colors: %i" % (img1.size[0], img1.size[1], colors)
+print("Sprite sheet size: {%i,%i}; Number of colors: %i" % (img1.size[0], img1.size[1], colors))
 
 ###################################
 # Rearrange into 8 * Height blocks
@@ -50,14 +50,14 @@ for row in range(0, img1.size[1], height):
 ################################
 # Convert pixel data to buffers 
 block = 8*height
-frames = len(pixdata) / block
+frames = len(pixdata) // block
 if colors==3:
     numBytes = (2*frames*height)
     data = [chr(0)] * numBytes
     for color in range(1,3):
         for frame in range(frames):
             for i in range(0, block, 8):
-                data[(color-1)*frames*height+frame*height+i/8] = \
+                data[(color-1)*frames*height+frame*height+i//8] = \
                     chr(((pixdata[frame*block+i+7] in [color,3])<<0) + ((pixdata[frame*block+i+6] in [color,3])<<1) + 
                         ((pixdata[frame*block+i+5] in [color,3])<<2) + ((pixdata[frame*block+i+4] in [color,3])<<3) + 
                         ((pixdata[frame*block+i+3] in [color,3])<<4) + ((pixdata[frame*block+i+2] in [color,3])<<5) + 
@@ -68,7 +68,7 @@ else:
     for color in range(1,colors+1):
         for frame in range(frames):
             for i in range(0, block, 8):
-                data[(color-1)*frames*height+frame*height+i/8] = \
+                data[(color-1)*frames*height+frame*height+i//8] = \
                     chr(((pixdata[frame*block+i+7]==color)<<0) + ((pixdata[frame*block+i+6]==color)<<1) + 
                         ((pixdata[frame*block+i+5]==color)<<2) + ((pixdata[frame*block+i+4]==color)<<3) + 
                         ((pixdata[frame*block+i+3]==color)<<4) + ((pixdata[frame*block+i+2]==color)<<5) + 
@@ -77,7 +77,6 @@ else:
 ###########################
 # Write output binary file
 f2 = io.open(output, 'wb')
-f2.write(chr(len(data)%256))
-f2.write(chr(len(data)/256))
-f2.write(''.join(data))
+f2.write(bytes([len(data) % 256, len(data) // 256]))
+f2.write(bytes(ord(value) for value in data))
 f2.close()

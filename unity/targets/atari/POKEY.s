@@ -72,6 +72,7 @@ _sampleCtrl:  .res 4
 		
 _PlayMusic:
 .ifdef __ATARIXL__
+.ifndef NETSTREAM
 	; Setup track address
 	ldx _musicAddr+0	; low byte of RMT module to X reg
 	ldy _musicAddr+1    ; hi byte of RMT module to Y reg
@@ -82,6 +83,7 @@ _PlayMusic:
 	lda #01
 	sta _musicVBI
 	jsr _StartVBI
+.endif
 .endif	
 	rts
 
@@ -91,8 +93,13 @@ _StopMusic:
 	lda #00
 	sta _musicVBI
 	
+	; In NetStream builds RMT must not touch POKEY at all: its reset routine
+	; writes all four audio channels and AUDCTL, including the serial clock
+	; channels reserved by the handler.
+.ifndef NETSTREAM
 	; Reset RMT player (all sounds off)
 	jsr RMTPlayer+9
+.endif
 .endif	
 	rts
 
@@ -135,7 +142,7 @@ skipMusicVBI:
 	lda _sfxVBI
 	beq skipSFXVBI
 
-	; Loop through channel 0-3
+	; Loop through the SFX channels
 	ldy #0
 	loopY:
 		; Check sample timer
@@ -179,7 +186,15 @@ skipMusicVBI:
 		
 	nextY:
 		iny
+.ifdef NETSTREAM
+		; POKEY channels 3 and 4 are the NetStream bit clock -- stop at 2.
+		; The loop already early-outs on sampleTimer[y]==0, but that is
+		; incidental and must not be relied on.
+		; See ref/netstream-plan/00-constraints.md section 2.
+		cpy #2
+.else
 		cpy #4
+.endif
 		bne loopY
 
 skipSFXVBI:

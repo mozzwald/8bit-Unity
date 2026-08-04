@@ -67,6 +67,13 @@
  	void PlaySFX(unsigned char index, unsigned char pitch, unsigned char volume, unsigned char channel) {
 		// Prepare SFX data
 		unsigned char *data = sfxData[index];
+		
+	#ifdef __NETSTREAM__
+		// POKEY channels 3 and 4 are the NetStream bit clock. This is the
+		// backstop that keeps the invariant even if a caller passes 2 or 3.
+		// See ref/netstream-plan/00-constraints.md section 2.
+		if (channel > 1) { return; }
+	#endif
 		unsigned char period = data[0];
 		unsigned char interv = 8-pitch/32u;
 		unsigned char ch;
@@ -346,8 +353,13 @@ void InitSFX()
 	SID.flt_ctrl = 0x44;	// filter control
 	SID.amp      = 0x1F;	// amplitude
 #elif defined __ATARI__
+  #ifndef __NETSTREAM__
+	// AUDCTL and SKCTL belong to the NetStream handler once the stream is up;
+	// it sets AUDCTL=$28 to join channels 3+4 as the bit clock. Touching either
+	// kills the link, and InitSFX() runs before every race.
 	POKE((char*)0xD208,0);  // reset AUDCTL
 	POKE((char*)0xD20F,3);
+  #endif
 	SetupSFX();	// VBI for SFX samples
 #elif defined __ORIC__
 	EnableChannels();
@@ -363,7 +375,12 @@ void StopSFX()
 #elif defined __ATARI__
 	unsigned char i;
 	StopMusic();
+  #ifdef __NETSTREAM__
+	// Stop at channel 2: 3 and 4 are the NetStream bit clock.
+	for (i=0; i<2; i++) {
+  #else
 	for (i=0; i<4; i++) {
+  #endif
 		sampleTimer[i] = 0;
 		POKE((char*)(0xD200+2*i), 0);
 		POKE((char*)(0xD201+2*i), 0);

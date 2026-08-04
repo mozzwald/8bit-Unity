@@ -46,7 +46,7 @@ flagFile = charFile.replace('-oric.png', '.csv')
 # Read char and font bitmaps
 charImg = Image.open(charFile)
 charRaw = list(charImg.getdata())
-print "Charset size: {%i,%i}" % (charImg.size[0], charImg.size[1])
+print("Charset size: {%i,%i}" % (charImg.size[0], charImg.size[1]))
 
 ############################
 # Prepare image for PictOric

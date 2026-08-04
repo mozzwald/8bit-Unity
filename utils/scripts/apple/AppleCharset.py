@@ -41,7 +41,7 @@ flagFile = charFile.replace('-apple.png', '.csv')
 charImg = Image.open(charFile)
 charRaw = list(charImg.getdata())
 colors = max(charRaw)
-print "Charmap size: {%i,%i}; Colors: %i" % (charImg.size[0], charImg.size[1], colors)
+print("Charmap size: {%i,%i}; Colors: %i" % (charImg.size[0], charImg.size[1], colors))
 
 #######################################
 # Rearrange into 2 sets of 3.5*8 blocks

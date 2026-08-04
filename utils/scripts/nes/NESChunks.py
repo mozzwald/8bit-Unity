@@ -122,7 +122,7 @@ for i in range(len(cropLst)):
     
     # Compute size of chunk
     sizeLst.append(6+(range2-range1)+h*w)
-    print 'Adding Chunk ', coords
+    print('Adding Chunk ', coords)
 
 #######################################
 # Re-crunch name table by dropping similar tiles

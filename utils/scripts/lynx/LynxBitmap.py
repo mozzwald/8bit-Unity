@@ -34,7 +34,7 @@ output = sys.argv[2]
 # Read source bitmap and palette
 img1 = Image.open(input)
 pixdata = list(img1.getdata())
-print "Bitmap size: {%i,%i}; Colors: %i" % (img1.size[0], img1.size[1], max(pixdata))
+print("Bitmap size: {%i,%i}; Colors: %i" % (img1.size[0], img1.size[1], max(pixdata)))
 
 ############################################
 # Convert image data to Lynx format
@@ -48,5 +48,5 @@ for y in range(102):
 ###########################
 # Write output binary file
 f2 = io.open(output, 'wb')
-f2.write(''.join(data))
+f2.write(bytes(ord(value) for value in data))
 f2.close()

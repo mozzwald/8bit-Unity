@@ -36,7 +36,7 @@ flagFile = charFile.replace('-atari.png','.csv')
 # Read source bitmap and palette
 charImg = Image.open(charFile)
 charRaw = list(charImg.getdata())
-print "Charmap size: {%i,%i}; Colors: %i" % (charImg.size[0],charImg.size[1],max(charRaw))
+print("Charmap size: {%i,%i}; Colors: %i" % (charImg.size[0],charImg.size[1],max(charRaw)))
 
 #################################
 # Get image palette
@@ -59,7 +59,7 @@ for row in range(0, charImg.size[1], 8):
         for i in range(0, 128):
             if i in block:
                 distrib[i] += 1                
-sharedColors = sorted(range(len(distrib)), key=distrib.__getitem__)[123:128]
+sharedColors = sorted(list(range(len(distrib))), key=distrib.__getitem__)[123:128]
 sharedColors.reverse()
 
 ####################################
@@ -96,13 +96,13 @@ for row in range(0,charImg.size[1],8):
                 else:
                     # 5th color
                     charBlocks.append(3)
-                    attrData[row*4+col/4] = chr(128)              
+                    attrData[row*4+col//4] = chr(128)
 
 ############################################
 # Convert char and font data to Atari format
 charData = [chr(0)] * (128*8)
 for i in range(0,len(charBlocks),4):
-    charData[i/4] = chr((charBlocks[i+0]<<6) + (charBlocks[i+1]<<4) + (charBlocks[i+2]<<2) + (charBlocks[i+3]<<0))
+    charData[i//4] = chr((charBlocks[i+0]<<6) + (charBlocks[i+1]<<4) + (charBlocks[i+2]<<2) + (charBlocks[i+3]<<0))
 
 #######################
 # Read character flags
@@ -118,8 +118,8 @@ with open(flagFile) as csvfile:
 ###########################
 # Write output binary file
 f2 = io.open(output,'wb')
-f2.write(''.join(colData))
-f2.write(''.join(charData))
-f2.write(''.join(attrData))
-f2.write(''.join(flagData))
+f2.write(bytes(ord(value) for value in colData))
+f2.write(bytes(ord(value) for value in charData))
+f2.write(bytes(ord(value) for value in attrData))
+f2.write(bytes(ord(value) for value in flagData))
 f2.close()

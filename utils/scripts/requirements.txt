@@ -1,0 +1,8 @@
+Pillow>=10,<12
+pygubu>=0.41,<1
+
+# Linux native tools (not installable through pip):
+# - exomizer 3.x on PATH, or set EXOMIZER=/absolute/path/to/exomizer
+#   Example source build: git clone https://bitbucket.org/magli143/exomizer.git
+#   then: make -C exomizer/src build
+# - utils/zx0 (bundled) for Atari executable compression, or set ZX0=/path/to/zx0

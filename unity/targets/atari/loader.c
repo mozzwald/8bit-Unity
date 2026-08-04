@@ -46,6 +46,9 @@ int main (void)
 #if defined __FUJINET__	
     gotoxy(13, 13); cprintf("3 - Fujinet");	
 #endif
+#if defined __NETSTREAM__
+    gotoxy(13, 14); cprintf("4 - NetStream");
+#endif
     gotoxy(10, 15);  cprintf("< 8bit-Unity Loader >");
 	
 	while (1) {
@@ -72,10 +75,17 @@ int main (void)
 			xbios_run_file();
 			break;
 #endif
-#if defined __FUJINET__				
+#if defined __FUJINET__	
 		case '3':
 			gotoxy(5, 17); cprintf("  Loading Fujinet version...");
 			FileSet("fujinet.xex");
+			xbios_run_file();
+		break;
+#endif
+#if defined __NETSTREAM__
+		case '4':
+			gotoxy(5, 17); cprintf(" Loading NetStream version...");
+			FileSet("netstrm.xex");
 			xbios_run_file();
 			break;
 #endif

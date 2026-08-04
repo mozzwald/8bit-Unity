@@ -35,7 +35,8 @@ sfxFile = rawFile+".zx0"
 if "nt" == os.name:
     zx0 = "utils\scripts\zx0.exe "
 else:
-    zx0 = "wine utils/scripts/zx0.exe "
+    # Native ZX0 avoids the bundled Windows executable and Wine.
+    zx0 = os.environ.get("ZX0", "utils/zx0")
     
 # Read input file
 fin = io.open(xexFile, 'rb')
@@ -46,7 +47,7 @@ fin.close()
 fout = io.open(xexFile, 'wb')
 
 # 2 bytes atari header (i.e $ff $ff)
-fout.write(''.join([chr(0xFF),chr(0xFF)])) 
+fout.write(bytes([0xFF, 0xFF]))
 
 # Write blocks as raw files and compress them
 i = 2
@@ -65,14 +66,14 @@ while (i<len(data)):
         f.close()
         
         # Compress raw data
-        subprocess.call(zx0 + rawFile, shell=True)
+        subprocess.check_call([zx0, rawFile])
         f = io.open(sfxFile, 'rb')
         sfx = f.read()
         f.close()        
         
         # Append to compressed file
         fout.write(data[i+0:i+2])   # Load address
-        fout.write(''.join([chr(0x00),chr(0x00),chr(0x02)])) # Compressor header
+        fout.write(bytes([0x00, 0x00, 0x02])) # Compressor header
         fout.write(sfx)
         fout.write(data[i+4+size:i+4+size+6])   # Run code
         

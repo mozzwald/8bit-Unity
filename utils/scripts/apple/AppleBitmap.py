@@ -39,7 +39,7 @@ output = sys.argv[4]
 if "nt" == os.name:
     ex31 = "utils\scripts\exomizer-3.1.0.exe"
 else:
-    ex31 = "wine utils/scripts/exomizer-3.1.0.exe"
+    ex31 = os.environ.get("EXOMIZER", "exomizer")
 
 try:
     ###################
@@ -130,4 +130,4 @@ try:
         f.close()
 
 except:
-    print "Error: cannot convert " + input + "... (is it a 140x192 PNG file with 6 or 16 color palette?)"
+    print("Error: cannot convert " + input + "... (is it a 140x192 PNG file with 6 or 16 color palette?)")

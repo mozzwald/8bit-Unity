@@ -34,7 +34,7 @@ output = sys.argv[2]
 # Read source bitmap and palette
 charImg = Image.open(input)
 charRaw = list(charImg.getdata())
-print "Charmap size: {%i,%i}; Colors: %i" % (charImg.size[0], charImg.size[1], max(charRaw))
+print("Charmap size: {%i,%i}; Colors: %i" % (charImg.size[0], charImg.size[1], max(charRaw)))
 
 ############################
 # Rearrange into 4*4 blocks
@@ -49,7 +49,7 @@ for j in range(0, 4):
 # Convert char data to Lynx format
 charData = [chr(0)] * (128*8)
 for i in range(0, len(charBlocks), 2):
-    charData[i/2] = chr((charBlocks[i+0]<<4) + (charBlocks[i+1]<<0))                
+    charData[i//2] = chr((charBlocks[i+0]<<4) + (charBlocks[i+1]<<0))
 
 ################################
 # Convert character flags
@@ -65,6 +65,6 @@ with open(input.replace('-lynx.png', '.csv')) as csvfile:
 ###########################
 # Write output binary file
 f2 = io.open(output, 'wb')
-f2.write(''.join(charData))
-f2.write(''.join(flagData))
+f2.write(bytes(ord(value) for value in charData))
+f2.write(bytes(ord(value) for value in flagData))
 f2.close()

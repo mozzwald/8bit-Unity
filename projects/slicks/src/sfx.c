@@ -2,7 +2,14 @@
 #include "definitions.h"
 
 // SFX channel definitions
-#if defined(__ATARIXL__) || defined(__LYNX__) || defined(__NES__)
+#if defined(__NETSTREAM__)
+	// Channel index 2 is AUDF3/AUDC3, which the NetStream handler owns as half
+	// of its bit clock. Every Atari variant moves to channel 1 -- and the Lynx
+	// build takes the same branch harmlessly, since it already used 1.
+	// See ref/netstream-plan/00-constraints.md section 2.
+	#define CHAN_BLEEP 1
+	#define CHAN_BUMP  1
+#elif defined(__ATARIXL__) || defined(__LYNX__) || defined(__NES__)
 	#define CHAN_BLEEP 1
 	#define CHAN_BUMP  1
 #else

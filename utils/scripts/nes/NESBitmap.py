@@ -37,7 +37,7 @@ maxTiles = int(sys.argv[4])
 # Read source bitmap
 img1 = Image.open(input)
 colors = max(list(img1.getdata()))
-print "Bitmap size: {%i,%i}; Number of colors: %i" % (img1.size[0], img1.size[1], colors)
+print("Bitmap size: {%i,%i}; Number of colors: %i" % (img1.size[0], img1.size[1], colors))
 
 #################################
 # Redistribute colors
@@ -68,7 +68,7 @@ tileData = ''.join(EncodeTiles(img1, 8, 8))
 chars = [ [ 0 ] * 16 ]
 for i in range(768):
     chars.append( [ ord(c) for c in tileData[i*16:(i+1)*16] ] )
-names = range(1,769)
+names = list(range(1,769))
 
 #######################################
 # Crunch name table by dropping similar tiles

@@ -126,9 +126,13 @@ unsigned char GetJoy(unsigned char joy)
 	// 2 input types: D-Pad (#0) or 8bit-Hub (#1,#2,#3)
 	unsigned char reg, state;
 	if (joy) {
+	#if defined(__HUB__)
 		// Get state from HUB
 		RecvHub(HUB_SYS_STATE);
 		return hubState[joy];
+	#else
+		return 255;
+	#endif
 	} else {
 		// Get state from registry
 		reg = PEEK(0xfcb0); 

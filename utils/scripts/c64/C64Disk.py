@@ -100,7 +100,7 @@ while 1:
 
     # Execute Command
     subprocess.call(command, shell=True)
-    print("Closing File `" + diskname + '-c64' + suffix + ".d64'")
+    print(("Closing File `" + diskname + '-c64' + suffix + ".d64'"))
     
     # All done?
     if i == len(files):

@@ -25,9 +25,6 @@
 """
 
 import io,struct, sys
-
-def str2hex(input):
-    return "0x"+input.encode("hex")
     
 # Read binary files
 data = []
@@ -39,10 +36,10 @@ for i in range(2, len(sys.argv)):
 # Merge into single file
 f = io.open(sys.argv[1], 'wb')
 for i in range(0, len(data)):
-    if i is 0:
+    if i == 0:
         f.write(data[0])    # Include leading 2 bytes
     else:
         f.write(data[i][2:len(data[i])]) # Exclude leading 2 bytes
-    Sta = str2hex(data[i][3]+data[i][2]); End = hex(int(Sta, 16)+len(data[i])-7)
-    print "block%i: %s - %s" % (i, Sta, End)
+    Sta = hex(data[i][2] | (data[i][3] << 8)); End = hex(int(Sta, 16)+len(data[i])-7)
+    print("block%i: %s - %s" % (i, Sta, End))
 f.close()

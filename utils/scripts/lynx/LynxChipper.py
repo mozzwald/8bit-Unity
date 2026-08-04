@@ -41,4 +41,4 @@ try:
                 fout.write(line)
                 
 except:
-    print 'Error: cannot convert ' + input + '... (was it exported from Chipper as cc65 "remake"?)'
+    print('Error: cannot convert ' + input + '... (was it exported from Chipper as cc65 "remake"?)')

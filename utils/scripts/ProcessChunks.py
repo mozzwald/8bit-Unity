@@ -118,7 +118,7 @@ def PackApple(coords, pixdata, mode):
     imgHeight = coords[3]
     colors = max(pixdata)    
     blocks = []
-    for i in range(len(pixdata)/7):
+    for i in range(len(pixdata)//7):
         pixels = pixdata[i*7:(i+1)*7]
         if mode == 'single':
             # Reduce palette?
@@ -139,7 +139,7 @@ def PackApple(coords, pixdata, mode):
             blocks.append(block)
 
     # Write to file line-by-line
-    blocksPerLine = coords[2]/7
+    blocksPerLine = coords[2]//7
     if mode == 'single':
         i = 0; bufferMAIN = []
         while i < len(blocks):
@@ -166,7 +166,7 @@ def PackAtari(coords, pixdata):
     # Process to double frame buffer
     imgWidth  = coords[2]
     imgHeight = coords[3]
-    imgSize   = (imgHeight*imgWidth/4)
+    imgSize   = imgHeight*imgWidth//4
     buf1 = [0] * imgSize
     buf2 = [0] * imgSize
     for y in range(imgHeight):
@@ -176,13 +176,13 @@ def PackAtari(coords, pixdata):
             shift = 6 - 2*(x%4)
             if (x+y)%2:   # Alternate to create checker board
                 col2 = color%4 << shift
-                col1 = color/4 << shift
+                col1 = color//4 << shift
             else:
                 col1 = color%4 << shift
-                col2 = color/4 << shift
+                col2 = color//4 << shift
                 
             # Assign bits in both buffers
-            offset = y*(imgWidth/4)+x/4
+            offset = y*(imgWidth//4)+x//4
             mask = 255 - (3<<shift)            
             buf1[offset] = (buf1[offset] & mask) | col1
             buf2[offset] = (buf2[offset] & mask) | col2  
@@ -201,9 +201,9 @@ def PackC64(coords, pixdata, paldata):
     # Process in blocks of 4 x 8 pixels
     imgWidth  = coords[2]
     imgHeight = coords[3]
-    bmp = [0] * (imgWidth*imgHeight/4)
-    scr = [0] * (imgWidth*imgHeight/32)
-    col = [0] * (imgWidth*imgHeight/32)
+    bmp = [0] * (imgWidth*imgHeight//4)
+    scr = [0] * (imgWidth*imgHeight//32)
+    col = [0] * (imgWidth*imgHeight//32)
     for y in range(0, imgHeight, 8):
         for x in range(0, imgWidth, 4):
             # Find most abundant colors in block
@@ -222,7 +222,7 @@ def PackC64(coords, pixdata, paldata):
             for i in range(1,len(choice)+1):
                 color = choice[i-1][0]                        
                 translate[color] = i
-                offset = (y/8)*(imgWidth/4)+(x/4);
+                offset = (y//8)*(imgWidth//4)+(x//4);
                 if i == 1:
                     # SCREENRAM (Upper bits)
                     scr[offset] |= color << 4
@@ -236,14 +236,14 @@ def PackC64(coords, pixdata, paldata):
             # Assign colours not in palette to nearest colour
             for i in range(8):
                 for j in range(4):
-                    if block[i*4+j] not in translate.keys():
+                    if block[i*4+j] not in list(translate.keys()):
                         delta = []
                         vec1 = rgb[block[i*4+j]]
                         for k in range(1,4):
-                            vec2 = rgb[translate.keys()[k]]
+                            vec2 = rgb[list(translate.keys())[k]]
                             delta.append( sqrt( (vec1[0]-vec2[0])**2 + (vec1[1]-vec2[1])**2 + (vec1[2]-vec2[2])**2 ) )
                         swap = delta.index(min(delta))+1
-                        block[i*4+j] = translate.keys()[swap]
+                        block[i*4+j] = list(translate.keys())[swap]
                                               
                   
             # Set colour indices (0-3)
@@ -252,7 +252,7 @@ def PackC64(coords, pixdata, paldata):
                     color = block[i*4+j]
                     index = translate[color]
                     shift = 2*(3-(x+j)%4);
-                    offset = (imgWidth/4)*((y+i)&248)+((y+i)&7)+((2*(x+j))&504);
+                    offset = (imgWidth//4)*((y+i)&248)+((y+i)&7)+((2*(x+j))&504);
                     bmp[offset] |= index << shift
 
     return bmp+scr+col
@@ -264,7 +264,7 @@ def PackLynx(coords, pixdata):
     # Process to double frame buffer
     imgWidth  = coords[2]
     imgHeight = coords[3]
-    imgSize   = (imgHeight*imgWidth/2)
+    imgSize   = imgHeight*imgWidth//2
     buffer = [0] * imgSize
     offset = 0
     for y in range(imgHeight):
@@ -279,13 +279,13 @@ def PackLynx(coords, pixdata):
 def WriteChunks(fid, sizeLst, coorLst, dataLst):
 
     # Write header information
-    fid.write(chr(len(sizeLst)))
+    fid.write(bytes([len(sizeLst)]))
 
     # Write coords/size/data
     for i in range(len(sizeLst)):
-        fid.write(''.join([chr(b) for b in coorLst[i]]))
+        fid.write(bytes(coorLst[i]))
         fid.write(struct.pack('H', sizeLst[i]))
-        fid.write(''.join([chr(b) for b in dataLst[i]]))   
+        fid.write(bytes(dataLst[i]))
     
     
 ############################################    
@@ -351,7 +351,7 @@ for line in lines:
             sizeLst.append(6+len(data)) 
             dataLst.append(data)
         
-        print 'Packing Chunk ', coords
+        print('Packing Chunk ', coords)
    
 #######################################
 # Write chunk data   
