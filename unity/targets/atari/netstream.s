@@ -593,6 +593,17 @@ payload_done:
 		sta		NetstreamPayloadLen
 
 		; setup SIO DCB for $70/$F0 enable_netstream
+		;Save the OS device control block. xbios sets DDEVIC once at boot and
+		;reuses the DCB for every disk call, so leaving $70 in it sends the
+		;game's next sector read to the FujiNet device, which NAKs it:
+		;  CF: 70 52 69 01 2d   ('R' sector 361 addressed to $70)
+		ldx		#11
+@save_dcb:
+		lda		DDEVIC,x
+		sta		NetstreamDCBSave,x
+		dex
+		bpl		@save_dcb
+
 		lda		#$70
 		sta		DDEVIC
 		lda		#1
@@ -633,6 +644,25 @@ payload_done:
 		jsr		SIOV_org
 		sei
 		jsr		_restore_rom
+
+		;keep the SIO status, then give the OS its DCB back
+		lda		DSTATS
+		sta		NetstreamInitStatus
+		ldx		#11
+@restore_dcb:
+		lda		NetstreamDCBSave,x
+		sta		DDEVIC,x
+		dex
+		bpl		@restore_dcb
+
+		;A NAKed or timed-out enable used to pass silently: the client reported
+		;a good connect, the menu said DHCP OK, and the failure only surfaced
+		;later as a room-list timeout. $01 is SIO success.
+		lda		NetstreamInitStatus
+		cmp		#1
+		beq		@sio_ok
+		jmp		init_fail
+@sio_ok:
 .else
 		cli
 		jsr		SIOV
@@ -997,6 +1027,8 @@ NetstreamNominalBaudLo:	.res	1
 NetstreamNominalBaudHi:	.res	1
 NetstreamSKCTLLow:		.res	1
 NetstreamSKCTL:			.res	1	; composed SKCTL, so resume can restore it
+NetstreamDCBSave:		.res	12	; OS DCB, clobbered by the enable command
+NetstreamInitStatus:	.res	1	; DSTATS from that command
 
 inputBuffer:			.res	INPUT_BUFSIZE
 outputBuffer0:			.res	128
