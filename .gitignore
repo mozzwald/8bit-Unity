@@ -79,3 +79,8 @@ unity/targets/atari/directory.s
 unity/targets/atari/display.s
 unity/targets/atari/files.s
 unity/targets/atari/pmg.s
+
+# Go build artifacts
+server/gameserver
+server/testclient
+server/echoserver
