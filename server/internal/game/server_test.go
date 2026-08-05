@@ -400,3 +400,54 @@ func TestQuietSlotStopsReceivingFrames(t *testing.T) {
 	client.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	client.await(proto.SVFrame)
 }
+
+// ComLynx is half duplex on a single wire, so the server must not transmit to a
+// Lynx unprompted: FujiNet's echo-discard read swallows whatever the Lynx was
+// sending at the time, and every frame the server sees is corrupt. A Lynx is
+// answered only when it speaks.
+func TestLynxIsServedOnDemandNotOnTick(t *testing.T) {
+	server := New(1, 20)
+	listener, endpoint := testEndpoint(t, server)
+	defer listener.Close()
+	go server.Run()
+	defer server.Stop()
+
+	client := dial(t, "tcp", endpoint)
+	defer client.conn.Close()
+	client.join("LYNX", 0, 0, proto.PlatformLynx)
+
+	// Several ticks pass with the client silent; nothing may arrive.
+	client.conn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+	for {
+		var buffer [256]byte
+		if _, err := client.conn.Read(buffer[:]); err != nil {
+			break
+		}
+	}
+	client.conn.SetReadDeadline(time.Now().Add(400 * time.Millisecond))
+	var buffer [256]byte
+	if n, err := client.conn.Read(buffer[:]); err == nil {
+		t.Fatalf("server sent %d unprompted bytes to a Lynx", n)
+	}
+
+	// Speaking gets exactly one answer.
+	client.send(proto.CLFrame, make([]byte, 11))
+	client.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	client.await(proto.SVFrame)
+}
+
+// The Atari is full duplex over SIO and keeps its free-running fan-out.
+func TestAtariStillServedOnTheTick(t *testing.T) {
+	server := New(1, 20)
+	listener, endpoint := testEndpoint(t, server)
+	defer listener.Close()
+	go server.Run()
+	defer server.Stop()
+
+	client := dial(t, "udp", endpoint)
+	defer client.conn.Close()
+	client.join("ATARI", 0, 0, proto.PlatformAtari)
+
+	client.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	client.await(proto.SVFrame)
+}

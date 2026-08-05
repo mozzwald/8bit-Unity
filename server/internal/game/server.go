@@ -91,6 +91,11 @@ func (server *Server) tickRoom(room *Room) {
 		if !slot.lastHeard.IsZero() && now.Sub(slot.lastHeard) > QuietGrace {
 			continue
 		}
+		// A Lynx is answered when it speaks, not on the tick -- see
+		// replyToLynx in handleCarFrame.
+		if slot.platform == proto.PlatformLynx {
+			continue
+		}
 		// Sent even when the mask is empty. A player alone in a room excludes
 		// the only occupied slot -- their own -- so skipping empty frames meant
 		// the server said nothing at all to them, and NetworkUpdate() reported
@@ -248,6 +253,18 @@ func (server *Server) handleCarFrame(session *transport.Session, frame proto.Fra
 	previous := slot.car
 	slot.car = update.Car
 	slot.joy = update.Joy
+
+	// ComLynx is one wire shared by both directions. FujiNet writes the
+	// server's bytes onto it and then reads back exactly as many to discard its
+	// own echo (netstream.cpp, process_net_packet). If the Lynx happens to be
+	// transmitting during that window the read swallows the Lynx's bytes
+	// instead, and the frame the server finally sees is corrupt -- which is what
+	// "invalid COBS frame" on a tcp:// session is. Free-running at 20 Hz in both
+	// directions makes that collision routine, so the Lynx is served strictly on
+	// demand: it talks, then we answer, and the bus only ever has one owner.
+	if slot.platform == proto.PlatformLynx {
+		slot.session.Send(proto.SVFrame, room.stateFrame(index).Marshal())
+	}
 
 	// Navigation is only meaningful once the lights are out; the client does not
 	// advance Vehicle.way during warmup either (game.c:824).
