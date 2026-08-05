@@ -201,3 +201,19 @@ func TestTicksBetweenSaturates(t *testing.T) {
 		t.Fatalf("an hour = %d, want saturation at 0xFFFF", got)
 	}
 }
+
+// A player alone in a room used to get nothing from the server, because the
+// state frame excludes the recipient and there was no one else to report. The
+// client counts that as silence and times out after NET_TIMEOUT_TICKS.
+func TestLoneRacerStillGetsFrames(t *testing.T) {
+	room := newRoom(0, "Test")
+	room.slots[0].session = &fakeSession
+
+	frame := room.stateFrame(0)
+	if frame.Mask != 0 {
+		t.Fatalf("Mask = %d, want 0 for a lone racer", frame.Mask)
+	}
+	if len(frame.Marshal()) == 0 {
+		t.Fatal("an empty state frame marshals to nothing, so there is no keepalive to send")
+	}
+}

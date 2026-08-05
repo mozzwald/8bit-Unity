@@ -19,7 +19,7 @@ cd "$ROOT"
 export CC65_HOME="${CC65_HOME:-/usr/share/cc65}"
 HOST="${SLICKS_SERVER_HOST:-127.0.0.1}"
 PORT="${SLICKS_SERVER_PORT:-8320}"
-BAUD="${SLICKS_BAUD:-19200}"
+BAUD="${SLICKS_BAUD:-31250}"
 RXRING="${SLICKS_RX_RING:-256}"
 OUT="${1:-build/slicks-demo-atari64k-${HOST//./_}.atr}"
 

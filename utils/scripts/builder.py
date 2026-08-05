@@ -41,7 +41,7 @@ netstreamHost    = os.environ.get('SLICKS_SERVER_HOST', '192.168.1.120')
 netstreamPort    = os.environ.get('SLICKS_SERVER_PORT', '8320')
 # Pinned at 19200 so a MOTOR-only suspend is baud-transparent; not a tuning knob.
 # See ref/netstream-plan/00-constraints.md section 1, trap 2.
-netstreamBaud    = os.environ.get('SLICKS_BAUD', '19200')
+netstreamBaud    = os.environ.get('SLICKS_BAUD', '31250')
 # The XL loader keeps a temporary character generator at $7C20 while it loads
 # the program. A 512-byte ring extends BSS through $7CCF and corrupts it.
 # 256 bytes holds several complete protocol frames and stays below $7C20.

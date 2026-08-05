@@ -83,11 +83,12 @@ func (server *Server) tickRoom(room *Room) {
 		if !slot.occupied() {
 			continue
 		}
-		frame := room.stateFrame(byte(index))
-		if frame.Mask == 0 {
-			continue
-		}
-		slot.session.Send(proto.SVFrame, frame.Marshal())
+		// Sent even when the mask is empty. A player alone in a room excludes
+		// the only occupied slot -- their own -- so skipping empty frames meant
+		// the server said nothing at all to them, and NetworkUpdate() reported
+		// ERR_TIMEOUT ten seconds into warmup (network.c, NET_TIMEOUT_TICKS).
+		// A one-byte frame is also the keepalive the protocol otherwise lacks.
+		slot.session.Send(proto.SVFrame, room.stateFrame(byte(index)).Marshal())
 	}
 }
 

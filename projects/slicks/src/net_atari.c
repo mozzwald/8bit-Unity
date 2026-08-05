@@ -12,15 +12,24 @@
 #endif
 
 /*
- * Baud is pinned at 19200 and this is not a tuning knob. Motor-deassert does not
- * restore the FujiNet's baud rate -- only sio_disable_netstream() does, and that
- * is the teardown we are avoiding. During a suspend the FujiNet keeps listening
- * at netstream_baud while the Atari OS talks to the disk at SIO_STANDARD_BAUDRATE,
- * which is 19200 (lib/bus/sio/sio.h:51). Matching them makes suspend
- * baud-transparent. See ref/netstream-plan/00-constraints.md section 1, trap 2.
+ * 31250 -- MIDI rate, matching the other working NetStream titles.
+ *
+ * This was pinned at 19200 on the theory that a MOTOR-only suspend is then
+ * baud-transparent, because the Atari talks to the disk at
+ * SIO_STANDARD_BAUDRATE. That was never true: FujiNet negotiates HSIO at
+ * 57600 for disk loading, so the rates differed across a suspend no matter
+ * what the stream ran at. The firmware now restores the SIO rate when MOTOR
+ * de-asserts, which is what actually makes the handover safe and frees the
+ * stream to run as fast as the link allows.
+ *
+ * Any value in the handler's table works; see BaudTable in
+ * unity/targets/atari/netstream.s. An entry that is not in it fails the
+ * lookup and ns_init_netstream() returns an error.
+ *
+ * Needs ref/netstream-plan/fujinet-motor-suspend-baud.patch, or HSIO off.
  */
 #ifndef SLICKS_BAUD
-	#define SLICKS_BAUD 19200
+	#define SLICKS_BAUD 31250
 #endif
 
 /* REGISTER | TX external clock. UDP: the server keys sessions by token, so a
@@ -61,10 +70,11 @@ unsigned char NetOpen(void)
 
 	NetReset();
 
-	/* The return value is not trustworthy: ns_init_netstream() never checks the
-	   SIOV status, so an absent FujiNet or an unreachable host still reports
-	   success (constraints section 3). The ClientJoin timeout is the real
-	   detector; this only catches an outright refusal. */
+	/* This now reflects DSTATS, so a NAKed or timed-out enable is reported here
+	   rather than surfacing later as an unexplained room-list timeout. It still
+	   cannot detect an unreachable *host*: the FujiNet acknowledges the command
+	   before it knows whether anything answers at the far end, so the ClientJoin
+	   timeout remains the detector for that. */
 	if (ns_init_netstream(SLICKS_SERVER_HOST, NETSTREAM_FLAGS, SLICKS_BAUD,
 	                      swap16(SLICKS_SERVER_PORT)) != 0) {
 		return 0;

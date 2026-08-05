@@ -17,9 +17,10 @@ export CC65_HOME="${CC65_HOME:-/usr/share/cc65}"
 
 SLICKS_SERVER_HOST="${SLICKS_SERVER_HOST:-192.168.1.120}"
 SLICKS_SERVER_PORT="${SLICKS_SERVER_PORT:-8320}"
-# Pinned at 19200 so a MOTOR-only suspend is baud-transparent. Not a tuning knob;
-# see ref/netstream-plan/00-constraints.md section 1, trap 2.
-SLICKS_BAUD="${SLICKS_BAUD:-19200}"
+# MIDI rate. Must be an entry in BaudTable (unity/targets/atari/netstream.s),
+# and needs the firmware to restore the SIO rate on MOTOR de-assert -- see
+# ref/netstream-plan/00-constraints.md, trap 4.
+SLICKS_BAUD="${SLICKS_BAUD:-31250}"
 SLICKS_RX_RING="${SLICKS_RX_RING:-256}"
 OUT="$ROOT/build"
 
