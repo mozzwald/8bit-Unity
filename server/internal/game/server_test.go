@@ -332,3 +332,30 @@ func TestLeaveFreesTheSlot(t *testing.T) {
 	}
 	t.Fatal("CL_LEAVE did not free the slot")
 }
+
+// A single player in a room must still receive SV_FRAME. The state frame omits
+// the recipient's own slot, so a lone racer's mask is empty -- and while empty
+// frames were skipped the server sent them nothing at all. The client counts
+// that as a dead link and reports ERR_TIMEOUT ten seconds into warmup.
+func TestLoneRacerReceivesFrames(t *testing.T) {
+	server := New(1, 20)
+	listener, endpoint := testEndpoint(t, server)
+	defer listener.Close()
+	go server.Run()
+	defer server.Stop()
+
+	client := dial(t, "udp", endpoint)
+	defer client.conn.Close()
+	client.join("SOLO", 0, 0, proto.PlatformAtari)
+
+	// Two ticks at 20 Hz is 100ms; allow plenty of slack for a loaded machine.
+	client.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	frame := client.await(proto.SVFrame)
+
+	if len(frame.Payload) == 0 {
+		t.Fatal("SV_FRAME arrived with no payload")
+	}
+	if frame.Payload[0] != 0 {
+		t.Fatalf("mask = %d, want 0 with nobody else in the room", frame.Payload[0])
+	}
+}
