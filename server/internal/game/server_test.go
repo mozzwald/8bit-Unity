@@ -359,3 +359,44 @@ func TestLoneRacerReceivesFrames(t *testing.T) {
 		t.Fatalf("mask = %d, want 0 with nobody else in the room", frame.Payload[0])
 	}
 }
+
+// An Atari drops MOTOR and goes silent for seconds while it loads a map, and it
+// cannot receive during that window. Firing state at it the whole time makes
+// FujiNet queue what fits, drop the rest, and deliver the survivors as one burst
+// the client's ring cannot absorb -- observed as drops=28/count=32 followed by a
+// client that never spoke again.
+func TestQuietSlotStopsReceivingFrames(t *testing.T) {
+	server := New(1, 20)
+	listener, endpoint := testEndpoint(t, server)
+	defer listener.Close()
+	go server.Run()
+	defer server.Stop()
+
+	client := dial(t, "udp", endpoint)
+	defer client.conn.Close()
+	client.join("QUIET", 0, 0, proto.PlatformAtari)
+
+	client.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	client.await(proto.SVFrame) // talking, so served
+
+	// Go quiet the way a map load does, then drain whatever was already in
+	// flight and confirm the server has stopped adding to it.
+	time.Sleep(QuietGrace + 250*time.Millisecond)
+	client.conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+	for {
+		var buffer [256]byte
+		if _, err := client.conn.Read(buffer[:]); err != nil {
+			break
+		}
+	}
+	client.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	var buffer [256]byte
+	if n, err := client.conn.Read(buffer[:]); err == nil {
+		t.Fatalf("server sent %d bytes to a slot that has been silent for %v", n, QuietGrace)
+	}
+
+	// Speaking up resumes the fan-out.
+	client.send(proto.CLFrame, make([]byte, 11))
+	client.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	client.await(proto.SVFrame)
+}

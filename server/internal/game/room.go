@@ -16,6 +16,11 @@ const MapCount = 10
 // DefaultLapGoal is the number of laps a race runs for.
 const DefaultLapGoal = 3
 
+// QuietGrace is how long a slot may say nothing before the server stops sending
+// it state. It has to outlast the gap between two CL_FRAMEs at the client's
+// 20 Hz rate, and be far shorter than the client's own ERR_TIMEOUT window.
+const QuietGrace = 750 * time.Millisecond
+
 // ResultsHold is how long RESULTS is shown before the room returns to WARMUP.
 const ResultsHold = 8 * time.Second
 
@@ -39,6 +44,13 @@ type Slot struct {
 	// followed the previous ones.
 	lapStart   time.Time
 	navRejects uint16
+
+	// lastHeard is when this slot last said anything. An Atari goes silent for
+	// several seconds while it drops MOTOR and loads a map off disk, and it
+	// cannot receive during that window: FujiNet buffers what it can and throws
+	// the rest away, then delivers the survivors as one burst that overruns the
+	// client's 256-byte ring. So the fan-out waits until the client is talking.
+	lastHeard time.Time
 }
 
 func (slot *Slot) occupied() bool { return slot.session != nil }

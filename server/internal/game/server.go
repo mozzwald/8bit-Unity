@@ -79,8 +79,16 @@ func (server *Server) tickRoom(room *Room) {
 		}.Marshal())
 	}
 
+	now := time.Now()
 	for index, slot := range room.slots {
 		if !slot.occupied() {
+			continue
+		}
+		// Silent for longer than QuietGrace means suspended, or gone. Either
+		// way there is nobody reading, and queued state is worse than no state:
+		// SV_FRAME carries the latest positions, so anything held back would be
+		// stale by the time it landed.
+		if !slot.lastHeard.IsZero() && now.Sub(slot.lastHeard) > QuietGrace {
 			continue
 		}
 		// Sent even when the mask is empty. A player alone in a room excludes
@@ -178,6 +186,12 @@ func (server *Server) handleJoin(session *transport.Session, frame proto.Frame) 
 		session.Addr(), proto.Trim(request.Name), room.Name(), slot,
 		proto.PlatformName(request.Platform))
 
+	room.mu.Lock()
+	if _, entry := room.slotOf(session); entry != nil {
+		entry.lastHeard = time.Now()
+	}
+	room.mu.Unlock()
+
 	session.Send(proto.SVInfo, room.info(slot).Marshal())
 	server.announce(room)
 }
@@ -202,6 +216,7 @@ func (server *Server) handleReady(session *transport.Session) {
 	_, slot := room.slotOf(session)
 	if slot != nil {
 		slot.ready = true
+		slot.lastHeard = time.Now()
 	}
 	step, mapID := room.step, room.mapID
 	room.mu.Unlock()
@@ -229,6 +244,7 @@ func (server *Server) handleCarFrame(session *transport.Session, frame proto.Fra
 		return
 	}
 
+	slot.lastHeard = time.Now()
 	previous := slot.car
 	slot.car = update.Car
 	slot.joy = update.Joy
@@ -283,6 +299,7 @@ func (server *Server) handleEvent(session *transport.Session, frame proto.Frame)
 		return
 	}
 	event.Slot = index
+	slot.lastHeard = time.Now()
 
 	switch event.Event {
 	case proto.EventRace:
