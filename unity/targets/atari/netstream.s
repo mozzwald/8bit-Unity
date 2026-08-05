@@ -188,6 +188,7 @@ skctl_ext_int:
 		lda		#$40			; %100
 skctl_apply:
 		ora		NetstreamSKCTLLow
+		sta		NetstreamSKCTL
 		sta		SSKCTL
 		sta		SKCTL
 
@@ -280,6 +281,22 @@ not_active:
 		sta		POKMSK
 		sta		IRQEN
 
+		;Give the serial port back to the OS. Masking POKMSK is not enough:
+		;VSERIN/VSEROR/VSEROC still point here, so when the OS's own SIO
+		;re-enables those IRQs for a disk transfer they arrive in this
+		;handler and get fed from an empty stream ring. The Atari asserts
+		;CMD and then shifts out nothing, which FujiNet reports as
+		;"SIO CMD ignored" -- at any baud. Mirrors NS_EndConcurrent_Impl,
+		;without ending the session.
+		ldx		#5
+@restore:
+		lda		serialVecSave,x
+		sta		VSERIN,x
+		dex
+		bpl		@restore
+
+		jsr		SwapIrqVector
+
 		;deassert motor
 		lda		#$3c
 		sta		PACTL
@@ -291,6 +308,26 @@ not_active:
 .proc NS_Resume_Impl
 		php
 		sei
+
+		;take the serial port back: the same vector swap begin performs, so
+		;serialVecSave again holds the OS's handlers for the next suspend
+		ldy		#5
+		ldx		#5
+@swap:
+		lda		VSERIN,x
+		sta		serialVecSave,x
+		lda		serialVecs,y
+		sta		VSERIN,x
+		dey
+		dex
+		bpl		@swap
+
+		jsr		SwapIrqVector
+
+		;the OS's SIO reprogrammed SKCTL for its own transfer
+		lda		NetstreamSKCTL
+		sta		SSKCTL
+		sta		SKCTL
 
 		;reassert motor; the firmware restores netstream_baud itself
 		lda		#$34
@@ -959,6 +996,7 @@ NetstreamPortHi:		.res	1
 NetstreamNominalBaudLo:	.res	1
 NetstreamNominalBaudHi:	.res	1
 NetstreamSKCTLLow:		.res	1
+NetstreamSKCTL:			.res	1	; composed SKCTL, so resume can restore it
 
 inputBuffer:			.res	INPUT_BUFSIZE
 outputBuffer0:			.res	128
