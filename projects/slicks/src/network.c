@@ -75,6 +75,23 @@ static unsigned char netBuffer[NET_BUFFER];
    bandwidth we do not have at 19200 baud. */
 #define NET_FRAME_TICKS 3u		/* 20Hz @ 60Hz */
 
+/* ComLynx is a single open-collector wire carrying both directions, so the
+   two ends have to take turns. FujiNet writes the server's bytes onto it and
+   then reads back the same count to discard its own echo
+   (lib/device/comlynx/netstream.cpp, process_net_packet); anything the Lynx
+   transmits during that window is swallowed instead, and the server sees a
+   damaged frame. Sending on a free-running timer guarantees the overlap.
+
+   So on Lynx a frame is sent in reply to one arriving, never on a clock --
+   the discipline the proven client in ~/build/a8-mcp-demo-game/v6 uses
+   ("movement is paced by WORLD_STATE arrivals rather than by any local
+   timer", lynx-client/src/main.c:108). The server answers a Lynx only when
+   it hears from one, so the wire has a single owner at a time.
+
+   The timer becomes the recovery path: a dropped frame in either direction
+   would otherwise stall the exchange for good. */
+#define NET_LYNX_REPRIME_TICKS 6u	/* 100ms @ 60Hz */
+
 static unsigned char joined = 0;
 static unsigned char pendingEvent = 0;
 static unsigned char scratch[NET_MAX_PAYLOAD];
@@ -399,13 +416,17 @@ void ClientLeave()
 unsigned char NetworkUpdate()
 {
 	unsigned char event = 0;
+	unsigned char heard = 0;
 
 	if (!networkReady) { return 0; }
 
+#if !defined(__LYNX__)
 	if (clock() - timeSend >= NET_FRAME_TICKS) { ClientFrame(); }
+#endif
 
 	while (NetPoll()) {
 		timeRecv = clock();
+		heard = 1;
 
 		switch (netFrame.opcode) {
 		case SV_FRAME:
@@ -428,6 +449,15 @@ unsigned char NetworkUpdate()
 			break;
 		}
 	}
+
+#if defined(__LYNX__)
+	/* Take our turn on the wire: the bus is idle now that the reply is
+	   drained. Falls back to the timer if nothing arrived, so a lost frame
+	   re-primes the exchange instead of deadlocking it. */
+	if (heard || clock() - timeSend >= NET_LYNX_REPRIME_TICKS) { ClientFrame(); }
+#else
+	(void)heard;
+#endif
 
 	if (!event && pendingEvent) {
 		event = pendingEvent;
