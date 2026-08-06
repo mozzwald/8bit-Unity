@@ -4,6 +4,7 @@
 package transport
 
 import (
+	"encoding/hex"
 	"log"
 	"net"
 	"sync"
@@ -29,6 +30,7 @@ type Session struct {
 	decoder  proto.Decoder
 	sequence byte
 	lastSeen time.Time
+	lastDump time.Time
 	closed   bool
 }
 
@@ -109,6 +111,22 @@ func (session *Session) feed(data []byte, handler Handler) {
 
 	for _, err := range errs {
 		log.Printf("%s: %v", session.Addr(), err)
+	}
+	if len(errs) != 0 {
+		// A decode error says the bytes were damaged but not how. Dump the chunk
+		// that produced it, throttled, so the shape is visible: echoed server
+		// frames look like SV_ opcodes coming back, a half-duplex collision
+		// looks like plausible bytes with a bad CRC, and a truncated write ends
+		// mid-frame with no delimiter.
+		session.mu.Lock()
+		show := time.Since(session.lastDump) > time.Second
+		if show {
+			session.lastDump = time.Now()
+		}
+		session.mu.Unlock()
+		if show {
+			log.Printf("%s: raw in (%d bytes): %s", session.Addr(), len(data), hex.EncodeToString(data))
+		}
 	}
 	for _, frame := range frames {
 		handler.OnFrame(session, frame)

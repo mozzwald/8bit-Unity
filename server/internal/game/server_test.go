@@ -451,3 +451,63 @@ func TestAtariStillServedOnTheTick(t *testing.T) {
 	client.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	client.await(proto.SVFrame)
 }
+
+// The Atari never showed the Lynx's car. That could be the Lynx failing to
+// transmit, or the server failing to relay -- this pins the second half down:
+// a CL_FRAME from the Lynx must reach the Atari as an SV_FRAME whose mask names
+// the Lynx's slot and whose bytes are the Car layout network.c decodes.
+func TestLynxCarReachesTheAtari(t *testing.T) {
+	server := New(1, 20)
+	listener, endpoint := testEndpoint(t, server)
+	defer listener.Close()
+	go server.Run()
+	defer server.Stop()
+
+	atari := dial(t, "udp", endpoint)
+	defer atari.conn.Close()
+	atari.join("ATARI", 0, 0, proto.PlatformAtari)
+
+	lynx := dial(t, "tcp", endpoint)
+	defer lynx.conn.Close()
+	lynx.join("LYNX", 0, 0, proto.PlatformLynx)
+
+	// The Atari has to stay "heard" or the quiet-slot gate stops serving it.
+	atari.send(proto.CLFrame, make([]byte, 11))
+
+	// A recognisable position from the Lynx: x=0x1234, y=0x5678.
+	car := proto.CarFrame{Joy: 0, Car: proto.Car{
+		X: 0x1234, Y: 0x5678, Ang1: 90, Vel: 7, Way: 3, Lap: 1,
+	}}
+	lynx.send(proto.CLFrame, car.Marshal())
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if time.Now().After(deadline) {
+			t.Fatal("the Lynx's car never reached the Atari")
+		}
+		atari.send(proto.CLFrame, make([]byte, 11))
+		atari.conn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+		frame, ok := func() (proto.Frame, bool) {
+			defer func() { recover() }()
+			return atari.await(proto.SVFrame), true
+		}()
+		if !ok || len(frame.Payload) < 1 {
+			continue
+		}
+		if frame.Payload[0]&(1<<1) == 0 {
+			continue // mask does not name the Lynx yet
+		}
+		// Slot 0 is excluded, so the Lynx's Car starts right after the mask.
+		if len(frame.Payload) < 1+proto.CarBytes {
+			t.Fatalf("SV_FRAME too short for a car: %d bytes", len(frame.Payload))
+		}
+		got, err := proto.ParseCarFrame(append([]byte{0}, frame.Payload[1:1+proto.CarBytes]...))
+		if err != nil {
+			t.Fatalf("car payload: %v", err)
+		}
+		if got.Car.X != 0x1234 || got.Car.Y != 0x5678 {
+			t.Fatalf("relayed car = (%#x,%#x), want (0x1234,0x5678)", got.Car.X, got.Car.Y)
+		}
+		return
+	}
+}
