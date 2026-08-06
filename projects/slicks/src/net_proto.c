@@ -102,6 +102,18 @@ void NetSend(unsigned char opcode, const unsigned char* payload, unsigned char l
 	raw[3 + len] = (unsigned char)crc;
 	raw[4 + len] = (unsigned char)(crc >> 8);
 
+	/* Restate the header immediately before encoding. On Lynx every frame
+	   reaches the server with opcode, seq and len all zero while the payload
+	   and CRC are perfect -- 119 of 138 captured frames decoded to a header of
+	   00 00 00 at the correct 16-byte length. The generated 6502 does store
+	   all three, so something clears them between here and CobsEncode.
+	   Rewriting them costs three stores and keeps the CRC valid, since it was
+	   computed over these same values. If frames still arrive headerless the
+	   corruption is downstream of the encode, which narrows it sharply. */
+	raw[0] = opcode;
+	raw[1] = seq;
+	raw[2] = len;
+
 	size = CobsEncode(5 + len);
 	wire[size++] = 0;
 	NetPutBytes(wire, size);
