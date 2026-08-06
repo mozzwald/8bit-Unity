@@ -1,15 +1,6 @@
 #include "definitions.h"
 #include "net_proto.h"
 
-/* The codec's buffers live in main RAM rather than the RMT player region that
-   holds the rest of BSS. That region is 256 bytes short of the whole of BSS, and
-   main RAM has the slack; this file is the natural place to take it from, being
-   NetStream-only and self-contained.
-   See unity/targets/atari/atarixl-netstream.cfg. */
-#if defined(__ATARI__) && defined(__NETSTREAM__)
-  #pragma bss-name(push, "NETBSS2")
-#endif
-
 NetFrame netFrame;
 
 unsigned int  netTxStalls = 0;
@@ -23,10 +14,6 @@ static unsigned char rxLen = 0;
    while a partial frame is still being assembled. */
 static unsigned char raw[NET_MAX_RAW];
 static unsigned char wire[NET_MAX_WIRE + 1];
-
-#if defined(__ATARI__) && defined(__NETSTREAM__)
-  #pragma bss-name(pop)
-#endif
 
 unsigned int NetCRC16(const unsigned char* data, unsigned char len)
 {

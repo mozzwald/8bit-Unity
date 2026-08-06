@@ -92,6 +92,14 @@ static unsigned char netBuffer[NET_BUFFER];
    would otherwise stall the exchange for good. */
 #define NET_LYNX_REPRIME_TICKS 6u	/* 100ms @ 60Hz */
 
+/* One bit per slot: has a real position for it ever arrived? Until it has,
+   cars[i] holds whatever the local grid reset left there -- (0,0) for a slot
+   that filled after this client set its cars up. ServerFrame() only ever
+   writes deltas, so such a car sits invisible off the top-left of the track
+   until some update happens to exceed LERP_THRESHOLD and snap it into view
+   (game.c:567). Adopt the first position outright instead. */
+static unsigned char svSeen = 0;
+
 static unsigned char joined = 0;
 static unsigned char pendingEvent = 0;
 static unsigned char scratch[NET_MAX_PAYLOAD];
@@ -119,6 +127,7 @@ void ServerConnect()
 {
 	networkReady = NetOpen();
 	joined = 0;
+	svSeen = 0;
 	pendingEvent = 0;
 	timeRecv = clock();
 	timeSend = clock();
@@ -186,6 +195,9 @@ void ServerInfo()
 {
 	unsigned char i, j;
 	const unsigned char* slot;
+
+	/* A slot that empties and refills is a different car; make it re-adopt. */
+	svSeen = 0;
 
 	clIndex = netFrame.payload[0];
 	svMap   = netFrame.payload[1];
@@ -269,8 +281,18 @@ void ServerFrame()
 
 		car = &cars[i];
 		if (i != clIndex && controlIndex[i] == NET_CONTROL) {
-			car->dx = GetInt(&read[0]) - car->x;
-			car->dy = GetInt(&read[2]) - car->y;
+			if (!(svSeen & (1 << i))) {
+				/* First sighting: take the position, do not interpolate
+				   towards it from a place this car was never at. */
+				svSeen |= (1 << i);
+				car->x = GetInt(&read[0]);
+				car->y = GetInt(&read[2]);
+				car->dx = 0;
+				car->dy = 0;
+			} else {
+				car->dx = GetInt(&read[0]) - car->x;
+				car->dy = GetInt(&read[2]) - car->y;
+			}
 			car->ang1 = GetInt(&read[4]);
 			car->vel = GetInt(&read[6]);
 			car->way = read[8];

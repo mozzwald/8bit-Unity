@@ -21,6 +21,13 @@ const DefaultLapGoal = 3
 // 20 Hz rate, and be far shorter than the client's own ERR_TIMEOUT window.
 const QuietGrace = 750 * time.Millisecond
 
+// LynxProbe bounds how long a Lynx can go unanswered. It is served on demand,
+// but a Lynx whose frames are all arriving damaged would never be answered and
+// so would never receive anything either -- deaf as well as unheard, with no
+// way back. Probing occasionally keeps it able to see the race, and to time out
+// honestly if the link really is gone.
+const LynxProbe = time.Second
+
 // ResultsHold is how long RESULTS is shown before the room returns to WARMUP.
 const ResultsHold = 8 * time.Second
 
@@ -51,6 +58,11 @@ type Slot struct {
 	// the rest away, then delivers the survivors as one burst that overruns the
 	// client's 256-byte ring. So the fan-out waits until the client is talking.
 	lastHeard time.Time
+
+	// lastServed is when this slot was last sent a state frame. A Lynx is
+	// normally answered when it speaks, so this only matters as the probe floor
+	// below.
+	lastServed time.Time
 }
 
 func (slot *Slot) occupied() bool { return slot.session != nil }

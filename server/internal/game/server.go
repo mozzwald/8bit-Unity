@@ -84,18 +84,21 @@ func (server *Server) tickRoom(room *Room) {
 		if !slot.occupied() {
 			continue
 		}
-		// Silent for longer than QuietGrace means suspended, or gone. Either
-		// way there is nobody reading, and queued state is worse than no state:
-		// SV_FRAME carries the latest positions, so anything held back would be
-		// stale by the time it landed.
-		if !slot.lastHeard.IsZero() && now.Sub(slot.lastHeard) > QuietGrace {
-			continue
-		}
-		// A Lynx is answered when it speaks, not on the tick -- see
-		// replyToLynx in handleCarFrame.
 		if slot.platform == proto.PlatformLynx {
+			// Answered when it speaks, not on the tick -- but never left
+			// completely unanswered, or a Lynx we cannot hear becomes a Lynx
+			// that cannot see.
+			if now.Sub(slot.lastServed) < LynxProbe {
+				continue
+			}
+		} else if !slot.lastHeard.IsZero() && now.Sub(slot.lastHeard) > QuietGrace {
+			// Silent for longer than QuietGrace means suspended, or gone.
+			// Either way there is nobody reading, and queued state is worse
+			// than no state: SV_FRAME carries the latest positions, so
+			// anything held back would be stale by the time it landed.
 			continue
 		}
+		slot.lastServed = now
 		// Sent even when the mask is empty. A player alone in a room excludes
 		// the only occupied slot -- their own -- so skipping empty frames meant
 		// the server said nothing at all to them, and NetworkUpdate() reported
@@ -263,6 +266,7 @@ func (server *Server) handleCarFrame(session *transport.Session, frame proto.Fra
 	// directions makes that collision routine, so the Lynx is served strictly on
 	// demand: it talks, then we answer, and the bus only ever has one owner.
 	if slot.platform == proto.PlatformLynx {
+		slot.lastServed = time.Now()
 		slot.session.Send(proto.SVFrame, room.stateFrame(index).Marshal())
 	}
 
