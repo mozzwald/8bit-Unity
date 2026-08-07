@@ -435,6 +435,35 @@ void ClientLeave()
  * loop at consoles.c:349. Sends our car at the server tick rate, drains RX, and
  * reports the one event the caller acts on this frame.
  */
+#if defined(SLICKS_NETDEBUG)
+/* Counters, on screen, once a second. Everything about this link has so far
+   been inferred from what a client failed to draw; these say directly whether
+   the client is transmitting at all.
+
+     T  frames handed to NetSend        (climbing = the game is trying to send)
+     R  frames decoded from the server  (climbing = the link works inbound)
+     S  NetPutBytes give-ups            (climbing = ser_put/ns_send_byte refuses)
+     E  frames the codec rejected       (climbing = bytes arrive damaged)
+
+   T climbing while the server hears nothing puts the fault on the wire or the
+   handler. S climbing means the client never got the bytes out of the door. */
+void NetDebugHUD(void)
+{
+	static clock_t due = 0;
+
+	if (clock() < due) { return; }
+	due = clock() + 60u;
+
+	txtY = CHAT_ROW; txtX = 0;
+	inkColor = WHITE;
+	PrintChr('T'); PrintNum(clFrame);
+	PrintChr('R'); PrintNum(svFrame);
+	PrintChr('S'); PrintNum(netTxStalls);
+	PrintChr('E'); PrintNum(netRxErrors);
+	PrintChr(' ');
+}
+#endif
+
 unsigned char NetworkUpdate()
 {
 	unsigned char event = 0;

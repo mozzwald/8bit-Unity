@@ -247,6 +247,9 @@ typedef struct {
 #if defined __LYNX__
   void NextMusic(unsigned char blank);
 #endif
+#if defined(SLICKS_NETDEBUG)
+  void NetDebugHUD(void);
+#endif
 
 // See game.c
 void GameReset(void);

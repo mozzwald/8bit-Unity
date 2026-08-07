@@ -994,6 +994,9 @@ char GameLoop()
 		#else
 			j = NetworkUpdate();
 		#endif
+		#if defined(SLICKS_NETDEBUG)
+			NetDebugHUD();
+		#endif
 			if (j == EVENT_RACE) {
 				// Start Race
 				if (chatting) {
