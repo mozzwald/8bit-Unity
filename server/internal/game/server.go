@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -80,6 +81,24 @@ func (server *Server) tickRoom(room *Room) {
 	}
 
 	now := time.Now()
+	if now.Sub(room.lastReport) > RoomReport {
+		room.lastReport = now
+		occupied := false
+		line := ""
+		for index, slot := range room.slots {
+			if !slot.occupied() {
+				continue
+			}
+			occupied = true
+			line += fmt.Sprintf(" [%d %s %q x=%d y=%d heard=%dms rejects=%d]",
+				index, proto.PlatformName(slot.platform), proto.Trim(slot.name),
+				slot.car.X, slot.car.Y, now.Sub(slot.lastHeard).Milliseconds(), slot.navRejects)
+		}
+		if occupied {
+			log.Printf("%s state:%s", room.Name(), line)
+		}
+	}
+
 	for index, slot := range room.slots {
 		if !slot.occupied() {
 			continue
@@ -252,6 +271,12 @@ func (server *Server) handleCarFrame(session *transport.Session, frame proto.Fra
 		return
 	}
 
+	if !slot.spoke {
+		slot.spoke = true
+		log.Printf("%s: slot %d (%s) first accepted CL_FRAME: x=%d y=%d way=%d lap=%d",
+			room.Name(), index, proto.PlatformName(slot.platform),
+			update.Car.X, update.Car.Y, update.Car.Way, update.Car.Lap)
+	}
 	slot.lastHeard = time.Now()
 	previous := slot.car
 	slot.car = update.Car

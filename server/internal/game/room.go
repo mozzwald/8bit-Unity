@@ -21,6 +21,11 @@ const DefaultLapGoal = 3
 // 20 Hz rate, and be far shorter than the client's own ERR_TIMEOUT window.
 const QuietGrace = 750 * time.Millisecond
 
+// RoomReport is how often a room logs what the server believes each slot's car
+// is doing. It answers "does the server actually have this player's position?"
+// directly, instead of inferring it from what a client does or does not draw.
+const RoomReport = 5 * time.Second
+
 // LynxProbe bounds how long a Lynx can go unanswered. It is served on demand,
 // but a Lynx whose frames are all arriving damaged would never be answered and
 // so would never receive anything either -- deaf as well as unheard, with no
@@ -63,6 +68,9 @@ type Slot struct {
 	// normally answered when it speaks, so this only matters as the probe floor
 	// below.
 	lastServed time.Time
+
+	// spoke marks the first CL_FRAME the server managed to decode from a slot.
+	spoke bool
 }
 
 func (slot *Slot) occupied() bool { return slot.session != nil }
@@ -84,6 +92,9 @@ type Room struct {
 	// bounds a race nobody finishes.
 	stateUntil time.Time
 	raceUntil  time.Time
+
+	// lastReport paces the periodic state line.
+	lastReport time.Time
 }
 
 func newRoom(index byte, name string) *Room {
