@@ -17,9 +17,15 @@ const MapCount = 10
 const DefaultLapGoal = 3
 
 // QuietGrace is how long a slot may say nothing before the server stops sending
-// it state. It has to outlast the gap between two CL_FRAMEs at the client's
-// 20 Hz rate, and be far shorter than the client's own ERR_TIMEOUT window.
-const QuietGrace = 750 * time.Millisecond
+// it state. It exists to avoid burying a client that has dropped MOTOR to load a
+// map, which takes seconds -- not to police jitter.
+//
+// A real Atari does not send at a steady 20 Hz: its loop is busy, and captured
+// gaps run to 475ms routinely with occasional spikes past 2s. At 750ms those
+// stalls cut the client's feed off and back on, which looks exactly like the
+// erratic movement reported. Well under the client's 10s ERR_TIMEOUT, and still
+// well under a map load.
+const QuietGrace = 3 * time.Second
 
 // RoomReport is how often a room logs what the server believes each slot's car
 // is doing. It answers "does the server actually have this player's position?"

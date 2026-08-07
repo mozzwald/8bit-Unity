@@ -193,13 +193,29 @@ void ServerList()
    name list the scoreboard reads. */
 void ServerInfo()
 {
-	unsigned char i, j;
+	unsigned char i, j, local;
 	const unsigned char* slot;
 
 	/* A slot that empties and refills is a different car; make it re-adopt. */
 	svSeen = 0;
 
 	clIndex = netFrame.payload[0];
+
+	/* The menu always configures the local player as slot 0 (interface.c:46,
+	   { JOY 1, CPU, CPU, NONE }), but the server hands out whichever slot is
+	   free. Carry the local control across to the slot we were actually given.
+	   Without this, a client placed anywhere but slot 0 leaves its own car set
+	   to CPU -- which PlayerAvailable() skips entirely during warmup -- so the
+	   car is never simulated and the client transmits its spawn position for
+	   ever, while the joystick drives the slot the server just marked remote.
+	   Controls 4..NET_CONTROL-1 are the local ones. */
+	local = 4;
+	for (i = 0; i < MAX_PLAYERS; ++i) {
+		if (controlIndex[i] >= 4 && controlIndex[i] < NET_CONTROL) {
+			local = controlIndex[i];
+			break;
+		}
+	}
 	svMap   = netFrame.payload[1];
 	svStep  = netFrame.payload[2];
 	lapGoal = netFrame.payload[3];
@@ -208,7 +224,11 @@ void ServerInfo()
 		slot = &netFrame.payload[4 + i * (1 + MAX_NAME_LEN + 1)];
 
 		if (slot[0] == NET_SLOT_EMPTY) {
+			/* Not just nameless: an empty slot must stop being whatever the
+			   menu left it, or the client drives phantom CPU cars in an
+			   online race once gameStep leaves warmup. */
 			clName[i][0] = 0;
+			controlIndex[i] = 0;
 			continue;
 		}
 
@@ -216,9 +236,8 @@ void ServerInfo()
 		clName[i][MAX_NAME_LEN] = 0;
 
 		/* The wire carries occupancy, not NET_CONTROL: that is LEN_CONTROL-1
-		   and differs per target, so the server cannot name it. Our own slot
-		   keeps whatever local control the menu assigned. */
-		if (i != clIndex) { controlIndex[i] = NET_CONTROL; }
+		   and differs per target, so the server cannot name it. */
+		controlIndex[i] = (i == clIndex) ? local : NET_CONTROL;
 	}
 }
 
