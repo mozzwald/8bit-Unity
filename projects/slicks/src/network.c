@@ -300,9 +300,23 @@ void ServerFrame()
 
 		car = &cars[i];
 		if (i != clIndex && controlIndex[i] == NET_CONTROL) {
+			/* The wire angle is ang2 -- the one the owner draws itself at.
+			   GameLoop picks the sprite frame with (ang2+12)/23 and derives
+			   ang1 from it by lerping, so ang1 is reconstructable locally but
+			   ang2 is not: the only other thing that moves it is the joystick,
+			   and SV_FRAME has no joy byte (proto.Car is x,y,ang,vel,way,lap).
+			   Receiving into ang1 therefore left every remote car's ang2 frozen
+			   at whatever GameReset put there, and they all pointed the same
+			   way for the whole race. */
+			car->ang2 = GetInt(&read[4]);
 			if (!(svSeen & (1 << i))) {
 				/* First sighting: take the position, do not interpolate
-				   towards it from a place this car was never at. */
+				   towards it from a place this car was never at. ang1 is left
+				   to converge on its own -- snapping it too costs more code
+				   than the Atari has room for (netstream-chunk.s asserts the
+				   $7010 bound), and it is only the dead-reckoning heading for
+				   the first few frames. The drawn angle is ang2, already
+				   correct above. */
 				svSeen |= (1 << i);
 				car->x = GetInt(&read[0]);
 				car->y = GetInt(&read[2]);
@@ -312,7 +326,6 @@ void ServerFrame()
 				car->dx = GetInt(&read[0]) - car->x;
 				car->dy = GetInt(&read[2]) - car->y;
 			}
-			car->ang1 = GetInt(&read[4]);
 			car->vel = GetInt(&read[6]);
 			car->way = read[8];
 			car->lap = (signed char)read[9];
@@ -387,7 +400,9 @@ void ClientFrame()
 	scratch[len++] = car->joy;
 	PutInt(&scratch[len], car->x);    len += 2;
 	PutInt(&scratch[len], car->y);    len += 2;
-	PutInt(&scratch[len], car->ang1); len += 2;
+	/* ang2, not ang1: this is the angle we draw ourselves at, and the only one
+	   a receiver cannot reconstruct. See ServerFrame(). */
+	PutInt(&scratch[len], car->ang2); len += 2;
 	PutInt(&scratch[len], car->vel);  len += 2;
 	scratch[len++] = car->way;
 	scratch[len++] = (unsigned char)car->lap;

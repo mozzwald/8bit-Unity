@@ -146,10 +146,15 @@ const CarBytes = 10
 
 // Car is a single vehicle's replicated state. Fields mirror the Vehicle struct
 // at projects/slicks/src/definitions.h:218-232.
+//
+// Ang is the client's ang2, the trajectory angle it draws its own sprite from --
+// not ang1. A receiver derives ang1 from ang2 by lerping (game.c), so ang1 is
+// reconstructable and ang2 is not: nothing else on the wire moves it. The server
+// only relays the value, so the choice is the clients' to agree on.
 type Car struct {
-	X, Y, Ang1, Vel int16
-	Way             byte
-	Lap             int8
+	X, Y, Ang, Vel int16
+	Way            byte
+	Lap            int8
 }
 
 func putInt16(target []byte, value int16) {
@@ -185,7 +190,7 @@ func ParseCarFrame(payload []byte) (CarFrame, error) {
 func (car Car) marshalInto(target []byte) {
 	putInt16(target[0:], car.X)
 	putInt16(target[2:], car.Y)
-	putInt16(target[4:], car.Ang1)
+	putInt16(target[4:], car.Ang)
 	putInt16(target[6:], car.Vel)
 	target[8], target[9] = car.Way, byte(car.Lap)
 }
@@ -193,7 +198,7 @@ func (car Car) marshalInto(target []byte) {
 func (car *Car) parseFrom(source []byte) {
 	car.X = getInt16(source[0:])
 	car.Y = getInt16(source[2:])
-	car.Ang1 = getInt16(source[4:])
+	car.Ang = getInt16(source[4:])
 	car.Vel = getInt16(source[6:])
 	car.Way, car.Lap = source[8], int8(source[9])
 }

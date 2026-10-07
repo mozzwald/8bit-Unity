@@ -133,9 +133,23 @@ int main (void)
 	// Main Loop
 	InitJoy();
 	while (1) {
-        // Load menu screen
+        // Load menu screen.
+		// This runs again on every return from a race, by which point the
+		// NetStream is open and holding MOTOR asserted -- and a command frame
+		// sent while MOTOR is high is swallowed by the FujiNet, so the read
+		// never completes and the Atari hangs on a black screen. Same suspend
+		// the map load needs, below. Unconditional rather than gated on
+		// MODE_ONLINE: what matters is whether the stream is open, which
+		// NetSuspend() checks itself, and it can be open while gameMode has
+		// gone back to MODE_LOCAL.
+	#ifdef __NETSTREAM__
+		NetSuspend();
+	#endif
         LoadBitmap("menu.img");
-		
+	#ifdef __NETSTREAM__
+		NetResume();
+	#endif
+
 		// Show menu
 #if !(defined(__ATARI__) && defined(__NETSTREAM__))
 		LoadMusic("speednik.mus");

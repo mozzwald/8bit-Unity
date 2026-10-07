@@ -329,9 +329,36 @@ not_active:
 		sta		SSKCTL
 		sta		SKCTL
 
+		;...and it reprogrammed the bit clock too. AUDF3/AUDF4 are the serial
+		;divisor: the OS loads them from its own baud table for every transfer,
+		;and FujiNet negotiates HSIO on top of that, so after a map load POKEY
+		;is clocking at the disk's rate rather than the stream's. Restoring only
+		;SKCTL leaves the Atari shifting at the wrong baud in both directions --
+		;the server hears nothing it can frame, and the client decodes nothing
+		;back, which is exactly a silent link that ends in ERR_TIMEOUT.
+		;Same three writes NS_BeginConcurrent_Impl makes.
+		lda		NetstreamFinalAUDF3
+		sta		AUDF3
+		lda		NetstreamFinalAUDF4
+		sta		AUDF4
+		lda		#$28			;1.79MHz clock, join ch3+4
+		sta		AUDCTL
+
 		;reassert motor; the firmware restores netstream_baud itself
 		lda		#$34
 		sta		PACTL
+
+		;drop the TX ring as well. A frame half-shifted out when MOTOR dropped
+		;is unsendable now, and worse, serialOutIdle would still read "busy"
+		;while the output-ready IRQ that would drain the ring is never coming
+		;back -- every later ns_send_byte then fills the ring and fails for
+		;good. Idle plus empty is the only state resume can guarantee.
+		lda		#$ff
+		sta		serialOutIdle
+		lda		#0
+		sta		outLevel
+		sta		outIndex
+		sta		serialOutHead
 
 		;drop anything stale in the RX ring -- bytes that arrived mid-suspend
 		;are a partial frame at best

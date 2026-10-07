@@ -124,12 +124,12 @@ func main() {
 			// Drive in a circle so remote interpolation has something to chew on.
 			angle := time.Since(start).Seconds()
 			car := proto.Car{
-				X:    int16(1000 + 400*math.Cos(angle)),
-				Y:    int16(1000 + 400*math.Sin(angle)),
-				Ang1: int16(int(angle*180/math.Pi) % 360),
-				Vel:  64,
-				Way:  byte(int(angle) % 8),
-				Lap:  0,
+				X:   int16(1000 + 400*math.Cos(angle)),
+				Y:   int16(1000 + 400*math.Sin(angle)),
+				Ang: int16(int(angle*180/math.Pi) % 360),
+				Vel: 64,
+				Way: byte(int(angle) % 8),
+				Lap: 0,
 			}
 			c.send(proto.CLFrame, proto.CarFrame{Car: car}.Marshal())
 		}

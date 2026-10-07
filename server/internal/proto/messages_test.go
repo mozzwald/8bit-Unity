@@ -22,7 +22,7 @@ func TestParseJoinRejectsWrongVersion(t *testing.T) {
 }
 
 func TestCarFrameRoundTrip(t *testing.T) {
-	frame := CarFrame{Joy: 0x0f, Car: Car{X: -1234, Y: 30000, Ang1: 359, Vel: -64, Way: 7, Lap: -1}}
+	frame := CarFrame{Joy: 0x0f, Car: Car{X: -1234, Y: 30000, Ang: 359, Vel: -64, Way: 7, Lap: -1}}
 	got, err := ParseCarFrame(frame.Marshal())
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestStateFrameRoundTripEverySlotCombination(t *testing.T) {
 		frame := StateFrame{Mask: byte(mask)}
 		for slot := 0; slot < MaxSlots; slot++ {
 			if mask&(1<<uint(slot)) != 0 {
-				frame.Cars[slot] = Car{X: int16(slot * 100), Y: int16(-slot), Ang1: 90, Vel: 8, Way: byte(slot), Lap: int8(slot)}
+				frame.Cars[slot] = Car{X: int16(slot * 100), Y: int16(-slot), Ang: 90, Vel: 8, Way: byte(slot), Lap: int8(slot)}
 			}
 		}
 		wire := frame.Marshal()

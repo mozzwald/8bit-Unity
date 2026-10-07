@@ -103,6 +103,26 @@ func (server *Server) tickRoom(room *Room) {
 		if !slot.occupied() {
 			continue
 		}
+		// A slot that has joined but never spoken is loading its map with the
+		// stream suspended, and cannot read a byte until it comes back.
+		//
+		// QuietGrace was meant to cover this, but it is measured from the last
+		// thing we heard -- and handleJoin stamps lastHeard, so the gate is
+		// open for the first three seconds of a load that takes about six. That
+		// is ~60 frames posted at a client that is not listening. FujiNet
+		// buffers the first couple of dozen, drops the rest, and delivers the
+		// survivors in one burst on MOTOR re-assert; after that it stops
+		// reading its UDP socket altogether and the link is deaf for good. The
+		// client then sends CL_READY, never sees SV_OK, and prints
+		// CONNECTION TIMED-OUT on the warmup track.
+		//
+		// So say nothing until the client speaks first. CL_READY sets ready and
+		// CL_FRAME sets spoke; either one means somebody is on the far end with
+		// the stream up. Costs a client nothing: ClientReady() transmits before
+		// it listens (network.c).
+		if !slot.ready && !slot.spoke {
+			continue
+		}
 		if slot.platform == proto.PlatformLynx {
 			// Answered when it speaks, not on the tick -- but never left
 			// completely unanswered, or a Lynx we cannot hear becomes a Lynx
@@ -118,12 +138,18 @@ func (server *Server) tickRoom(room *Room) {
 			continue
 		}
 		slot.lastServed = now
+		// The probe is also the recovery path for a Lynx whose held-back frames
+		// would otherwise never be collected, because it has stopped prompting.
+		if next, ok := slot.takePending(); ok {
+			slot.session.Send(next.opcode, next.payload)
+			continue
+		}
 		// Sent even when the mask is empty. A player alone in a room excludes
 		// the only occupied slot -- their own -- so skipping empty frames meant
 		// the server said nothing at all to them, and NetworkUpdate() reported
 		// ERR_TIMEOUT ten seconds into warmup (network.c, NET_TIMEOUT_TICKS).
 		// A one-byte frame is also the keepalive the protocol otherwise lacks.
-		slot.session.Send(proto.SVFrame, room.stateFrame(byte(index)).Marshal())
+		slot.session.Send(proto.SVFrame, room.frameFor(byte(index)).Marshal())
 	}
 }
 
@@ -139,6 +165,15 @@ func (room *Room) resetCarsLocked() {
 		}
 		slot.car = proto.Car{Lap: -1}
 		slot.ready = false
+		// A map change sends every client back through the same suspend-and-load
+		// the join path does, so the fan-out gate has to shut again -- ready
+		// alone would not do it, because spoke stays set from the last race and
+		// either one opens the gate. Without this the server fires at a client
+		// that has dropped MOTOR to read the new map off disk, which is what
+		// wedged FujiNet's socket on join. carSeq/sentSeq are deliberately left
+		// alone: the reset car is the (0,0) placeholder, and bumping carSeq
+		// would push it out to everyone.
+		slot.spoke = false
 		slot.finished = false
 		slot.position = 0
 		slot.lapBest = 0
@@ -228,9 +263,14 @@ func (server *Server) announce(room *Room) {
 	room.mu.Lock()
 	defer room.mu.Unlock()
 	for index, slot := range room.slots {
-		if slot.occupied() {
-			slot.session.Send(proto.SVInfo, room.infoLocked(byte(index)).Marshal())
+		if !slot.occupied() {
+			continue
 		}
+		roster := room.infoLocked(byte(index)).Marshal()
+		if deferForLynx(slot, proto.SVInfo, roster) {
+			continue
+		}
+		slot.session.Send(proto.SVInfo, roster)
 	}
 }
 
@@ -240,19 +280,34 @@ func (server *Server) handleReady(session *transport.Session) {
 		return
 	}
 	room.mu.Lock()
-	_, slot := room.slotOf(session)
-	if slot != nil {
-		slot.ready = true
-		slot.lastHeard = time.Now()
+	index, slot := room.slotOf(session)
+	if slot == nil {
+		room.mu.Unlock()
+		return
 	}
+	slot.ready = true
+	slot.lastHeard = time.Now()
 	step, mapID := room.step, room.mapID
+	// Restate the roster after answering. The announce that carried a join is
+	// lost on a client that was loading its map at the time -- FujiNet drops
+	// most of what is sent into a suspend, and ClientReady()'s wait loop
+	// discards anything that is not the answer it wants -- and SV_INFO is
+	// otherwise never repeated, so that client would race seeing only its own
+	// car. Sent after SV_OK, it survives the wait loop and is applied by
+	// NetworkUpdate()'s SV_INFO case on the first frame of the race.
+	roster := room.infoLocked(index).Marshal()
+	deferred := deferForLynx(slot, proto.SVInfo, roster)
 	room.mu.Unlock()
 
 	if step == proto.StepRace {
 		session.Send(proto.SVEvent, proto.Event{Event: proto.EventMap, Data1: mapID, Data2: step}.Marshal())
-		return
+	} else {
+		session.Send(proto.SVOK, nil)
 	}
-	session.Send(proto.SVOK, nil)
+
+	if !deferred {
+		session.Send(proto.SVInfo, roster)
+	}
 }
 
 func (server *Server) handleCarFrame(session *transport.Session, frame proto.Frame) {
@@ -281,6 +336,7 @@ func (server *Server) handleCarFrame(session *transport.Session, frame proto.Fra
 	previous := slot.car
 	slot.car = update.Car
 	slot.joy = update.Joy
+	slot.carSeq++
 
 	// ComLynx is one wire shared by both directions. FujiNet writes the
 	// server's bytes onto it and then reads back exactly as many to discard its
@@ -292,7 +348,16 @@ func (server *Server) handleCarFrame(session *transport.Session, frame proto.Fra
 	// demand: it talks, then we answer, and the bus only ever has one owner.
 	if slot.platform == proto.PlatformLynx {
 		slot.lastServed = time.Now()
-		slot.session.Send(proto.SVFrame, room.stateFrame(index).Marshal())
+		// One write per prompt. Sending a held-back frame and a state frame
+		// back to back would hand the wire back mid-burst: the Lynx transmits
+		// as soon as it hears anything (NetworkUpdate, network.c), so it would
+		// answer the first write while the second was still going out. The
+		// state frame it misses this round is superseded 50ms later anyway.
+		if next, ok := slot.takePending(); ok {
+			slot.session.Send(next.opcode, next.payload)
+		} else {
+			slot.session.Send(proto.SVFrame, room.frameFor(index).Marshal())
+		}
 	}
 
 	// Navigation is only meaningful once the lights are out; the client does not

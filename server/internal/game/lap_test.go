@@ -209,7 +209,7 @@ func TestLoneRacerStillGetsFrames(t *testing.T) {
 	room := newRoom(0, "Test")
 	room.slots[0].session = &fakeSession
 
-	frame := room.stateFrame(0)
+	frame := room.frameFor(0)
 	if frame.Mask != 0 {
 		t.Fatalf("Mask = %d, want 0 for a lone racer", frame.Mask)
 	}

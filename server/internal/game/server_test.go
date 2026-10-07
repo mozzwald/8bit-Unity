@@ -89,6 +89,15 @@ func (h *harness) await(opcode byte) proto.Frame {
 	return proto.Frame{}
 }
 
+// ready announces that the client is back from its map load. The server says
+// nothing to a slot that has only joined, so any test expecting the fan-out has
+// to speak first -- exactly as ClientReady() does on the real client.
+func (h *harness) ready() {
+	h.t.Helper()
+	h.send(proto.CLReady, nil)
+	h.await(proto.SVOK)
+}
+
 func (h *harness) join(name string, room byte, ticket uint32, platform byte) proto.Info {
 	h.t.Helper()
 	request := proto.Join{Ticket: ticket, Platform: platform, Version: proto.ProtocolVersion, Room: room}
@@ -170,10 +179,11 @@ func TestCarStateReachesTheOtherPlayer(t *testing.T) {
 	_, endpoint := start(t)
 	first := dial(t, "udp", endpoint)
 	first.join("FIRST", 0, 0, proto.PlatformAtari)
+	first.ready()
 	second := dial(t, "udp", endpoint)
 	second.join("SECOND", 0, 0, proto.PlatformAtari)
 
-	car := proto.Car{X: 4321, Y: -1234, Ang1: 180, Vel: 96, Way: 3, Lap: 1}
+	car := proto.Car{X: 4321, Y: -1234, Ang: 180, Vel: 96, Way: 3, Lap: 1}
 	second.send(proto.CLFrame, proto.CarFrame{Joy: 5, Car: car}.Marshal())
 
 	deadline := time.Now().Add(3 * time.Second)
@@ -347,6 +357,7 @@ func TestLoneRacerReceivesFrames(t *testing.T) {
 	client := dial(t, "udp", endpoint)
 	defer client.conn.Close()
 	client.join("SOLO", 0, 0, proto.PlatformAtari)
+	client.ready()
 
 	// Two ticks at 20 Hz is 100ms; allow plenty of slack for a loaded machine.
 	client.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -375,6 +386,7 @@ func TestQuietSlotStopsReceivingFrames(t *testing.T) {
 	client := dial(t, "udp", endpoint)
 	defer client.conn.Close()
 	client.join("QUIET", 0, 0, proto.PlatformAtari)
+	client.ready()
 
 	client.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	client.await(proto.SVFrame) // talking, so served
@@ -436,7 +448,10 @@ func TestLynxIsServedOnDemandNotOnTick(t *testing.T) {
 	client.await(proto.SVFrame)
 }
 
-// The Atari is full duplex over SIO and keeps its free-running fan-out.
+// The Atari is full duplex over SIO and keeps its free-running fan-out -- but
+// only once it has spoken. Between CL_JOIN and CL_READY it is loading its map
+// with the NetStream suspended, so anything sent lands in a FujiNet buffer that
+// overflows and then stops reading its socket for good.
 func TestAtariStillServedOnTheTick(t *testing.T) {
 	server := New(1, 20)
 	listener, endpoint := testEndpoint(t, server)
@@ -448,8 +463,235 @@ func TestAtariStillServedOnTheTick(t *testing.T) {
 	defer client.conn.Close()
 	client.join("ATARI", 0, 0, proto.PlatformAtari)
 
+	// No fan-out until it says it is back. SV_INFO from the join itself is
+	// fine -- the client is still listening for that when it arrives.
+	deadline := time.Now().Add(400 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		client.conn.SetReadDeadline(deadline)
+		buf := make([]byte, 2048)
+		n, err := client.conn.Read(buf)
+		if err != nil {
+			break
+		}
+		frames, _ := client.decoder.Push(buf[:n])
+		for _, frame := range frames {
+			if frame.Opcode == proto.SVFrame {
+				t.Fatal("server fanned out to an Atari still loading its map")
+			}
+		}
+	}
+
+	client.ready()
+
+	// And from then on the fan-out is free-running, not answer-on-demand.
 	client.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	client.await(proto.SVFrame)
+}
+
+// SV_INFO is announced when a player joins -- but a client loading its map at
+// that moment never receives it, and it is the frame that marks the newcomer's
+// slot as remote. Without a repeat, that client races seeing only its own car.
+// CL_READY is the first moment the client is known to be listening again, so
+// the roster must be restated right after SV_OK (after, because ClientReady()'s
+// wait loop discards everything until SV_OK), addressed to the asker's own
+// slot, not slot 0.
+func TestReadyRestatesTheRoster(t *testing.T) {
+	_, endpoint := start(t)
+	first := dial(t, "udp", endpoint)
+	first.join("FIRST", 0, 0, proto.PlatformAtari)
+	second := dial(t, "udp", endpoint)
+	second.join("SECOND", 0, 0, proto.PlatformAtari)
+
+	// Discard the join-time announce; the point is that the roster arrives
+	// again for a client that missed it. UDP datagrams carry whole frames, so
+	// dropping raw reads leaves the decoder consistent.
+	second.pending = nil
+	second.conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+	for {
+		var buffer [512]byte
+		if _, err := second.conn.Read(buffer[:]); err != nil {
+			break
+		}
+	}
+
+	second.send(proto.CLReady, nil)
+	second.await(proto.SVOK)
+	info, err := proto.ParseInfo(second.await(proto.SVInfo).Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Slot != 1 {
+		t.Fatalf("SV_INFO addressed to slot %d, want the asker's slot 1", info.Slot)
+	}
+	if info.Slots[0].Control != proto.SlotTaken || info.Slots[1].Control != proto.SlotTaken {
+		t.Fatal("the CL_READY roster does not list both players")
+	}
+}
+
+// A position is relayed once per recipient and never repeated. Repeats fight
+// the client's own extrapolation and show up as rubber-banding.
+func TestUnchangedCarsDropOutOfTheMask(t *testing.T) {
+	room := newRoom(0, "Test")
+	room.slots[0].session = &fakeSession
+	room.slots[1].session = &fakeSession
+
+	// Slot 1 has joined but never reported: its placeholder must stay hidden.
+	if mask := room.frameFor(0).Mask; mask != 0 {
+		t.Fatalf("mask = %d, want 0 before the other player has reported", mask)
+	}
+
+	room.slots[1].carSeq++
+	if mask := room.frameFor(0).Mask; mask != 0x02 {
+		t.Fatalf("mask = %d, want slot 1 after it reported", mask)
+	}
+	if mask := room.frameFor(0).Mask; mask != 0 {
+		t.Fatalf("mask = %d, want 0 -- that position was already relayed", mask)
+	}
+	room.slots[1].carSeq++
+	if mask := room.frameFor(0).Mask; mask != 0x02 {
+		t.Fatalf("mask = %d, want slot 1 again after a new position", mask)
+	}
+}
+
+// Freshness is tracked per recipient, not once per tick. The Atari is served on
+// the tick and the Lynx between ticks, so a single shared flag would let the
+// tick's Atari fan-out consume an update the Lynx had not been sent yet.
+func TestServingOneRecipientDoesNotConsumeAnothersUpdate(t *testing.T) {
+	room := newRoom(0, "Test")
+	room.slots[0].session = &fakeSession // Atari, served on the tick
+	room.slots[1].session = &fakeSession // Lynx, served on demand
+	room.slots[2].session = &fakeSession
+
+	room.slots[2].carSeq++ // slot 2 reports a new position
+
+	if mask := room.frameFor(0).Mask; mask&0x04 == 0 {
+		t.Fatal("the tick fan-out did not carry slot 2 to the Atari")
+	}
+	if mask := room.frameFor(1).Mask; mask&0x04 == 0 {
+		t.Fatal("serving the Atari consumed the update the Lynx had not seen")
+	}
+}
+
+// A map change puts every client back through the same suspend-and-load as the
+// join path, so the fan-out gate must shut again. spoke survives from the last
+// race and would otherwise hold it open.
+func TestMapChangeClosesTheFanOutGate(t *testing.T) {
+	room := newRoom(0, "Test")
+	room.slots[0].session = &fakeSession
+	room.slots[0].ready = true
+	room.slots[0].spoke = true
+
+	room.resetCarsLocked()
+
+	if room.slots[0].ready || room.slots[0].spoke {
+		t.Fatal("a reset slot still looks like a client that is listening")
+	}
+}
+
+// SV_INFO must reach a Lynx, but never as an unprompted write: ComLynx is one
+// shared wire, and a roster frame that collides with the Lynx's own transmit is
+// lost for good, taking every remote car with it. So it waits for the Lynx's
+// next CL_FRAME and is delivered in that reply slot.
+func TestLynxRosterWaitsForItsTurnOnTheWire(t *testing.T) {
+	server := New(1, 20)
+	listener, endpoint := testEndpoint(t, server)
+	defer listener.Close()
+	go server.Run()
+	defer server.Stop()
+
+	lynx := dial(t, "tcp", endpoint)
+	defer lynx.conn.Close()
+	lynx.join("LYNX", 0, 0, proto.PlatformLynx)
+
+	// Drain the join reply, then let a second player in. The announce must not
+	// put anything on the wire while the Lynx is unprompted.
+	lynx.pending = nil
+	lynx.conn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+	for {
+		var buffer [512]byte
+		if _, err := lynx.conn.Read(buffer[:]); err != nil {
+			break
+		}
+	}
+
+	atari := dial(t, "udp", endpoint)
+	defer atari.conn.Close()
+	atari.join("ATARI", 0, 0, proto.PlatformAtari)
+
+	lynx.conn.SetReadDeadline(time.Now().Add(400 * time.Millisecond))
+	var buffer [512]byte
+	if n, err := lynx.conn.Read(buffer[:]); err == nil {
+		t.Fatalf("server wrote %d unprompted bytes to a Lynx after a join announce", n)
+	}
+
+	// Speaking collects it, and it names both players.
+	lynx.send(proto.CLFrame, make([]byte, 11))
+	lynx.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	info, err := proto.ParseInfo(lynx.await(proto.SVInfo).Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Slots[0].Control != proto.SlotTaken || info.Slots[1].Control != proto.SlotTaken {
+		t.Fatal("the Lynx's roster does not list both players")
+	}
+	if info.Slot != 0 {
+		t.Fatalf("SV_INFO addressed to slot %d, want the Lynx's own slot 0", info.Slot)
+	}
+}
+
+// An EVENT_RACE lost to a wire collision leaves a Lynx sitting in warmup while
+// everyone else races, and nothing retries it. It is held back and delivered in
+// the Lynx's reply slot, in order, one write per prompt.
+func TestLynxEventsAreHeldBackAndDeliveredInOrder(t *testing.T) {
+	room := newRoom(0, "Test")
+	room.slots[0].session = &fakeSession
+	room.slots[0].platform = proto.PlatformLynx
+
+	room.broadcast(proto.SVEvent, proto.Event{Event: proto.EventRace}.Marshal())
+	room.broadcast(proto.SVEvent, proto.Event{Event: proto.EventLap}.Marshal())
+
+	if len(room.slots[0].pending) != 2 {
+		t.Fatalf("queued %d frames, want both events held back", len(room.slots[0].pending))
+	}
+	for _, want := range []byte{proto.EventRace, proto.EventLap} {
+		next, ok := room.slots[0].takePending()
+		if !ok {
+			t.Fatal("queue ran dry before every event was delivered")
+		}
+		event, err := proto.ParseEvent(next.payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if event.Event != want {
+			t.Fatalf("delivered event %d, want %d -- order is not preserved", event.Event, want)
+		}
+	}
+}
+
+// A roster already waiting is replaced, not queued behind itself: SV_INFO is a
+// snapshot, and handing over a superseded one would report a player who has
+// already joined as absent.
+func TestLynxRosterCoalescesToTheNewest(t *testing.T) {
+	room := newRoom(0, "Test")
+	room.slots[0].session = &fakeSession
+	room.slots[0].platform = proto.PlatformLynx
+	room.slots[1].session = &fakeSession
+
+	deferForLynx(room.slots[0], proto.SVInfo, room.infoLocked(0).Marshal())
+	room.slots[2].session = &fakeSession // a third player arrives
+	deferForLynx(room.slots[0], proto.SVInfo, room.infoLocked(0).Marshal())
+
+	if len(room.slots[0].pending) != 1 {
+		t.Fatalf("queued %d rosters, want them coalesced to 1", len(room.slots[0].pending))
+	}
+	next, _ := room.slots[0].takePending()
+	info, err := proto.ParseInfo(next.payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Slots[2].Control != proto.SlotTaken {
+		t.Fatal("the delivered roster is the superseded one")
+	}
 }
 
 // The Atari never showed the Lynx's car. That could be the Lynx failing to
@@ -476,7 +718,7 @@ func TestLynxCarReachesTheAtari(t *testing.T) {
 
 	// A recognisable position from the Lynx: x=0x1234, y=0x5678.
 	car := proto.CarFrame{Joy: 0, Car: proto.Car{
-		X: 0x1234, Y: 0x5678, Ang1: 90, Vel: 7, Way: 3, Lap: 1,
+		X: 0x1234, Y: 0x5678, Ang: 90, Vel: 7, Way: 3, Lap: 1,
 	}}
 	lynx.send(proto.CLFrame, car.Marshal())
 
